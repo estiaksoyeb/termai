@@ -14,7 +14,7 @@ It brings the power of Large Language Models (LLMs) directly to your mobile comm
 Open Termux and run the following commands:
 ```bash
 # 1. Clone the repository
-git clone [https://github.com/estiaksoyeb/termai
+git clone https://github.com/estiaksoyeb/termai
 
 # 2. Enter the directory
 cd termai
