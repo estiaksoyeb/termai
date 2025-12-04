@@ -13,6 +13,10 @@ CONFIG_FILE = DATA_DIR / "config.json"
 # Legacy file path for migration
 OLD_KEY_FILE = DATA_DIR / "key"
 
+# --- Colors ---
+GREEN = "\033[92m"
+RESET = "\033[0m"
+
 # --- Default Settings ---
 # If the config file is deleted/missing, these values are used to recreate it.
 DEFAULT_CONFIG = {
@@ -155,7 +159,8 @@ def main():
             # Check for content existence
             cand = data["candidates"][0]
             if "content" in cand:
-                print(cand["content"]["parts"][0]["text"].strip())
+                # GREEN OUTPUT HERE
+                print(f"{GREEN}{cand['content']['parts'][0]['text'].strip()}{RESET}")
             else:
                 print("[No content returned]")
                 if debug_mode: print(data)
