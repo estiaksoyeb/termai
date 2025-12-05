@@ -69,7 +69,10 @@ read -p "    Delete? [y/N]: " confirm
 if [[ "$confirm" =~ ^[yY]$ ]]; then
     CURRENT_DIR_NAME=$(basename "$PWD")
     
-    # SAFETY CHECK: Only delete if the folder is named 'termai'
+    # Enable case-insensitive matching
+    shopt -s nocasematch
+    
+    # SAFETY CHECK: Only delete if the folder is named 'termai' (case-insensitive)
     if [[ "$CURRENT_DIR_NAME" == "termai" ]]; then
         echo -e "${YELLOW}[*] Cleaning up...${RESET}"
         cd ..
@@ -79,6 +82,9 @@ if [[ "$confirm" =~ ^[yY]$ ]]; then
         echo -e "${RED}[!] Safety Stop: Current folder is named '$CURRENT_DIR_NAME', not 'termai'.${RESET}"
         echo "    Cleanup aborted to prevent accidental deletion of wrong files."
     fi
+    
+    # Disable case-insensitive matching
+    shopt -u nocasematch
 else
     echo -e "${GREEN}[✓] Setup complete. Files kept.${RESET}"
 fi
