@@ -134,12 +134,34 @@ def load_config():
 
     return new_config
 
+import shutil # Import shutil to check for editor availability
+
+# ... (rest of the file remains the same until open_editor)
+
 def open_editor():
-    """Opens the config file in the default editor (nano)."""
-    editor = os.getenv('EDITOR', 'nano')
+    """
+    Opens the config file in the user's preferred editor with a fallback mechanism.
+    Priority: $EDITOR > vim > nano
+    """
+    # 1. Prioritize the user's explicit choice
+    editor = os.getenv('EDITOR')
+
+    # 2. If no $EDITOR, try to find 'vim'
+    if not editor and shutil.which('vim'):
+        editor = 'vim'
+    
+    # 3. If still no editor, fall back to 'nano'
+    if not editor:
+        editor = 'nano'
+
     print(f"Opening config in {editor}...")
-    subprocess.call([editor, str(CONFIG_FILE)])
-    return 0 # Return 0 for success instead of sys.exit(0)
+    try:
+        subprocess.call([editor, str(CONFIG_FILE)])
+    except FileNotFoundError:
+        print(f"[Error] Editor '{editor}' not found. Please install it or set the $EDITOR environment variable.")
+        return 1
+    return 0 # Return 0 for success
+
 
 def print_help():
     """Prints the help menu with available commands."""

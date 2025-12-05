@@ -66,7 +66,12 @@ Run:
 ai --config
 ```
 
-This opens `config.json` in `nano`. It looks like this:
+This opens `config.json` in your preferred editor. The editor is chosen based on the following priority:
+1.  The `$EDITOR` environment variable.
+2.  `vim` (if installed).
+3.  `nano` (as a fallback).
+
+The configuration file looks like this:
 ```json
 {
     "provider": "gemini",
