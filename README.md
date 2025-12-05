@@ -126,8 +126,14 @@ If the AI isn't responding or you are getting errors, run:
 ```bash
 ai --debug "your question"
 ```
-
 This will print the raw server response and error codes.
+
+**Debug Configuration:**
+If you are having issues with your configuration, you can use the `--debug-config` flag to print the loaded configuration. API keys will be redacted for security.
+```bash
+ai --debug-config
+```
+
 ## 🗑 Uninstallation
 To remove Termai completely:
 ```bash

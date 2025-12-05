@@ -5,6 +5,7 @@ import requests
 import subprocess
 from pathlib import Path
 import copy # Import copy for deepcopy
+import shutil # Import shutil to check for editor availability
 
 # --- Configuration Paths ---
 APP_NAME = "termai"
@@ -146,10 +147,6 @@ def load_config():
 
     return new_config
 
-import shutil # Import shutil to check for editor availability
-
-# ... (rest of the file remains the same until open_editor)
-
 def open_editor():
     """
     Opens the config file in the user's preferred editor with a fallback mechanism.
@@ -174,7 +171,6 @@ def open_editor():
         return 1
     return 0 # Return 0 for success
 
-
 def print_help():
     """Prints the help menu with available commands."""
     print(f"\n{GREEN}Termai - Termux AI Assistant{RESET}")
@@ -185,64 +181,53 @@ def print_help():
     print(f"  cat file.txt | ai [OPTIONS] \"OPTIONAL PROMPT\"")
     
     print(f"\n{YELLOW}Options:{RESET}")
-    print(f"  {CYAN}--config{RESET}      Open configuration file (Edit API key, Model, Proxy, Prompts)")
-    print(f"  {CYAN}--debug{RESET}       Enable debug mode (Show raw status codes and errors)")
-    print(f"  {CYAN}--help, -h{RESET}    Show this help message")
-    print(f"  {CYAN}--reinstall{RESET}  Re-run the first-time setup to configure API keys")
+    print(f"  {CYAN}--config{RESET}        Open configuration file")
+    print(f"  {CYAN}--debug{RESET}         Enable debug mode")
+    print(f"  {CYAN}--debug-config{RESET}  Print the loaded configuration (redacts keys)")
+    print(f"  {CYAN}--help, -h{RESET}      Show this help message")
+    print(f"  {CYAN}--reinstall{RESET}    Re-run the first-time setup")
     
     print(f"\n{YELLOW}Examples:{RESET}")
     print(f"  ai \"How do I unzip a tar file?\"")
     print(f"  ai --config")
     print(f"  cat error.log | ai \"Explain this error briefly\"")
-    return 0 # Return 0 for success instead of sys.exit(0)
+    return 0 # Return 0 for success
 
 def send_gemini_request(config, user_input, debug_mode):
-    # Prepare Variables from Config
+    # ... (existing code for send_gemini_request)
     gemini_config = config.get("gemini_config", {})
     api_key = gemini_config.get("api_key")
     model_name = gemini_config.get("model_name", "gemini-2.5-flash")
     system_instr = gemini_config.get("system_instruction", "")
     gen_config = gemini_config.get("generation_config", {})
     proxy = config.get("proxy", "")
-
-    # Construct URL dynamically
     api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-
-    # 4. Payload Construction
     payload = {
         "contents": [{"parts": [{"text": user_input}]}],
         "systemInstruction": {"parts": [{"text": system_instr}]},
         "generationConfig": gen_config
     }
-
     if debug_mode: print(f"[Debug] Provider: Gemini | Model: {model_name} | Temp: {gen_config.get('temperature')} | Proxy: {proxy if proxy else 'None'}")
-
-    # 5. Send Request
     try:
         proxies = {"http": proxy, "https": proxy} if proxy else None
         response = requests.post(api_url, json=payload, proxies=proxies)
-        
         if debug_mode:
             print(f"[Debug] Status: {response.status_code}")
-
         if response.status_code != 200:
-            print(f"\n[Error {response.status_code}]")
-            print(response.text)
-            return 1 # Return non-zero for error
-
+            if response.status_code == 429:
+                print(f"\n[Error 429] You have exceeded your Gemini API quota.")
+                print("Please check your usage and billing details at aistudio.google.com.")
+            else:
+                print(f"\n[Error {response.status_code}]")
+                print(response.text)
+            return 1
         data = response.json()
-        
-        # Safety Check
         if "promptFeedback" in data and "blockReason" in data["promptFeedback"]:
             print(f"[Blocked] Reason: {data['promptFeedback']['blockReason']}")
-            return 0 # Blocked is not an error, just no content
-
-        # Output
+            return 0
         if "candidates" in data and data["candidates"]:
-            # Check for content existence
             cand = data["candidates"][0]
             if "content" in cand and "parts" in cand["content"] and cand["content"]["parts"]:
-                # GREEN OUTPUT HERE
                 print(f"{GREEN}{cand['content']['parts'][0]['text'].strip()}{RESET}")
             else:
                 print("[No content returned]")
@@ -250,13 +235,13 @@ def send_gemini_request(config, user_input, debug_mode):
         else:
             print("[Error] Invalid response format from Gemini")
             if debug_mode: print(data)
-        return 0 # Success
+        return 0
     except Exception as e:
         print(f"\n[Connection Error] {e}")
-        return 1 # Error
+        return 1
 
 def send_openai_request(config, user_input, debug_mode):
-    # Prepare Variables from Config
+    # ... (existing code for send_openai_request)
     openai_config = config.get("openai_config", {})
     api_key = openai_config.get("api_key")
     model_name = openai_config.get("model_name", "gpt-4o")
@@ -264,17 +249,11 @@ def send_openai_request(config, user_input, debug_mode):
     temperature = openai_config.get("temperature", 0.7)
     max_tokens = openai_config.get("max_tokens", 1024)
     proxy = config.get("proxy", "")
-
-    # Construct URL dynamically
     api_url = "https://api.openai.com/v1/chat/completions"
-
-    # Headers
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
-
-    # Payload Construction
     payload = {
         "model": model_name,
         "messages": [
@@ -284,30 +263,25 @@ def send_openai_request(config, user_input, debug_mode):
         "temperature": temperature,
         "max_tokens": max_tokens
     }
-
     if debug_mode: print(f"[Debug] Provider: OpenAI | Model: {model_name} | Temp: {temperature} | Proxy: {proxy if proxy else 'None'}")
-
-    # 5. Send Request
     try:
         proxies = {"http": proxy, "https": proxy} if proxy else None
         response = requests.post(api_url, headers=headers, json=payload, proxies=proxies)
-        
         if debug_mode:
             print(f"[Debug] Status: {response.status_code}")
-
         if response.status_code != 200:
-            print(f"\n[Error {response.status_code}]")
-            print(response.text)
-            return 1 # Return non-zero for error
-
+            if response.status_code == 429:
+                print(f"\n[Error 429] You have exceeded your OpenAI API quota.")
+                print("Please check your usage and billing details at platform.openai.com.")
+            else:
+                print(f"\n[Error {response.status_code}]")
+                print(response.text)
+            return 1
         data = response.json()
-        
-        # Output
         if "choices" in data and data["choices"]:
             message = data["choices"][0].get("message", {})
             content = message.get("content", "")
             if content:
-                # GREEN OUTPUT HERE
                 print(f"{GREEN}{content.strip()}{RESET}")
             else:
                 print("[No content returned]")
@@ -315,14 +289,13 @@ def send_openai_request(config, user_input, debug_mode):
         else:
             print("[Error] Invalid response format from OpenAI")
             if debug_mode: print(data)
-        return 0 # Success
+        return 0
     except Exception as e:
         print(f"\n[Connection Error] {e}")
-        return 1 # Error
-
+        return 1
 
 def cli_entry_point():
-    # Handle --reinstall flag first, as it affects config loading
+    # Handle --reinstall flag first
     if "--reinstall" in sys.argv:
         if CONFIG_FILE.exists():
             print(f"[{APP_NAME}] Deleting existing config for reinstall...")
@@ -330,20 +303,32 @@ def cli_entry_point():
         else:
             print(f"[{APP_NAME}] No existing config found. Starting first-time setup...")
     
-    # 0. Load Configuration (Variables System)
     config = load_config()
     
-    # If --reinstall was just run, config will be loaded/created.
-    # If the user exits the setup, config might be None.
     if "--reinstall" in sys.argv:
         print(f"[{APP_NAME}] Reinstall complete.")
         return 0
 
-    # If config could not be loaded and it's not interactive, exit with error
+    # Handle --debug-config flag
+    if "--debug-config" in sys.argv:
+        if not config:
+            print("[Error] No configuration file found. Run `ai --reinstall` to create one.")
+            return 1
+        
+        debug_config = copy.deepcopy(config)
+        if "gemini_config" in debug_config and "api_key" in debug_config["gemini_config"]:
+            key = debug_config["gemini_config"]["api_key"]
+            debug_config["gemini_config"]["api_key"] = f"***{key[-4:]}" if key else ""
+        if "openai_config" in debug_config and "api_key" in debug_config["openai_config"]:
+            key = debug_config["openai_config"]["api_key"]
+            debug_config["openai_config"]["api_key"] = f"***{key[-4:]}" if key else ""
+            
+        print(json.dumps(debug_config, indent=4))
+        return 0
+
     if config is None and not sys.stdin.isatty():
         return 1
     
-    # 1. Handle other Flags
     if "--help" in sys.argv or "-h" in sys.argv:
         return print_help()
 
@@ -351,23 +336,17 @@ def cli_entry_point():
         return open_editor()
 
     debug_mode = "--debug" in sys.argv
-    # Filter flags out of arguments so they don't get sent to the AI
-    args = [arg for arg in sys.argv[1:] if arg not in ["--debug", "--config", "--help", "-h"]]
+    args = [arg for arg in sys.argv[1:] if arg not in ["--debug", "--config", "--help", "-h", "--reinstall", "--debug-config"]]
 
-    # 2. Input Handling
     user_input = ""
     if not sys.stdin.isatty():
-        # Handle Piped Input (e.g., cat file | ai)
         user_input = sys.stdin.read().strip()
         if args: user_input += "\n" + " ".join(args)
     elif args:
-        # Handle Standard Arguments (e.g., ai "query")
         user_input = " ".join(args)
     else:
-        # No input provided, show help
         return print_help()
 
-    # 3. Get provider and send request
     provider = config.get("provider", "gemini")
     if provider == "gemini":
         return send_gemini_request(config, user_input, debug_mode)
@@ -376,7 +355,6 @@ def cli_entry_point():
     else:
         print(f"[Error] Invalid provider '{provider}' in config.json. Use 'gemini' or 'openai'.")
         return 1
-
 
 def main():
     sys.exit(cli_entry_point())
