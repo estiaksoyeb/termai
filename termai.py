@@ -24,6 +24,7 @@ RESET = "\033[0m"
 DEFAULT_CONFIG = {
     "api_key": "",
     "model_name": "gemini-2.5-flash",
+    "proxy": "",
     "system_instruction": (
         "You are a CLI assistant specific to Termux. "
         "Do NOT use Markdown. Do NOT use backticks. "
@@ -60,21 +61,28 @@ def load_config():
 
     # 2. Migration: If no config, check for old key file
     api_key = ""
+    # Store the backup_file path for potential cleanup later
+    backup_file = DATA_DIR / "key.bak"
     if OLD_KEY_FILE.exists():
         print(f"[{APP_NAME}] Migrating legacy key file to new config format...")
         with open(OLD_KEY_FILE, "r") as f:
             api_key = f.read().strip()
-        # Rename old file to backup just in case
-        OLD_KEY_FILE.rename(DATA_DIR / "key.bak")
-
+        
+        # Create a backup file before deleting the old key file
+        OLD_KEY_FILE.rename(backup_file)
+        
     # 3. First Run Setup
     if not api_key:
-        print(f"[{APP_NAME}] First run! Enter your Gemini API Key. Get the API key from aistudio.google.com")
-        api_key = input("API Key: ").strip()
-        if not api_key:
-            print("Error: Key cannot be empty.")
-            sys.exit(1)
-
+        if sys.stdin.isatty(): # Only prompt if interactive
+            print(f"[{APP_NAME}] First run! Enter your Gemini API Key. Get the API key from aistudio.google.com")
+            api_key = input("API Key: ").strip()
+            if not api_key:
+                print("Error: Key cannot be empty.")
+                sys.exit(1)
+        else:
+            # If non-interactive and no API key, return None to indicate config is not ready
+            return None
+    
     # 4. Create new Config Dictionary
     new_config = DEFAULT_CONFIG.copy()
     new_config["api_key"] = api_key
@@ -84,6 +92,11 @@ def load_config():
         json.dump(new_config, f, indent=4)
     
     print(f"Configuration saved to {CONFIG_FILE}\n")
+
+    # Clean up the backup file if it exists after migration
+    if backup_file.exists():
+         backup_file.unlink()
+
     return new_config
 
 def open_editor():
@@ -91,7 +104,7 @@ def open_editor():
     editor = os.getenv('EDITOR', 'nano')
     print(f"Opening config in {editor}...")
     subprocess.call([editor, str(CONFIG_FILE)])
-    sys.exit(0)
+    return 0 # Return 0 for success instead of sys.exit(0)
 
 def print_help():
     """Prints the help menu with available commands."""
@@ -103,7 +116,7 @@ def print_help():
     print(f"  cat file.txt | ai [OPTIONS] \"OPTIONAL PROMPT\"")
     
     print(f"\n{YELLOW}Options:{RESET}")
-    print(f"  {CYAN}--config{RESET}      Open configuration file (Edit API key, Model, Prompts)")
+    print(f"  {CYAN}--config{RESET}      Open configuration file (Edit API key, Model, Proxy, Prompts)")
     print(f"  {CYAN}--debug{RESET}       Enable debug mode (Show raw status codes and errors)")
     print(f"  {CYAN}--help, -h{RESET}    Show this help message")
     
@@ -111,18 +124,22 @@ def print_help():
     print(f"  ai \"How do I unzip a tar file?\"")
     print(f"  ai --config")
     print(f"  cat error.log | ai \"Explain this error briefly\"")
-    sys.exit(0)
+    return 0 # Return 0 for success instead of sys.exit(0)
 
-def main():
+def cli_entry_point():
     # 0. Load Configuration (Variables System)
     config = load_config()
 
+    # If config could not be loaded and it's not interactive, exit with error
+    if config is None and not sys.stdin.isatty():
+        return 1
+
     # 1. Handle Flags
     if "--help" in sys.argv or "-h" in sys.argv:
-        print_help()
+        return print_help()
 
     if "--config" in sys.argv:
-        open_editor()
+        return open_editor()
 
     debug_mode = "--debug" in sys.argv
     # Filter flags out of arguments so they don't get sent to the AI
@@ -139,13 +156,19 @@ def main():
         user_input = " ".join(args)
     else:
         # No input provided, show help
-        print_help()
+        return print_help()
 
     # 3. Prepare Variables from Config
+    # If config is None, it means the API key wasn't set on first run and it was not interactive
+    if config is None:
+        print("Error: API Key not configured. Please run 'ai' interactively to set it.")
+        return 1
+
     api_key = config.get("api_key")
     model_name = config.get("model_name", "gemini-2.5-flash")
     system_instr = config.get("system_instruction", "")
     gen_config = config.get("generation_config", {})
+    proxy = config.get("proxy", "")
 
     # Construct URL dynamically
     api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
@@ -157,11 +180,12 @@ def main():
         "generationConfig": gen_config
     }
 
-    if debug_mode: print(f"[Debug] Model: {model_name} | Temp: {gen_config.get('temperature')}")
+    if debug_mode: print(f"[Debug] Model: {model_name} | Temp: {gen_config.get('temperature')} | Proxy: {proxy if proxy else 'None'}")
 
     # 5. Send Request
     try:
-        response = requests.post(api_url, json=payload)
+        proxies = {"http": proxy, "https": proxy} if proxy else None
+        response = requests.post(api_url, json=payload, proxies=proxies)
         
         if debug_mode:
             print(f"[Debug] Status: {response.status_code}")
@@ -169,14 +193,14 @@ def main():
         if response.status_code != 200:
             print(f"\n[Error {response.status_code}]")
             print(response.text)
-            sys.exit(1)
+            return 1 # Return non-zero for error
 
         data = response.json()
         
         # Safety Check
         if "promptFeedback" in data and "blockReason" in data["promptFeedback"]:
             print(f"[Blocked] Reason: {data['promptFeedback']['blockReason']}")
-            sys.exit(0)
+            return 0 # Blocked is not an error, just no content
 
         # Output
         if "candidates" in data:
@@ -191,9 +215,13 @@ def main():
         else:
             print("[Error] Invalid response format")
             if debug_mode: print(data)
-
+        return 0 # Success
     except Exception as e:
         print(f"\n[Connection Error] {e}")
+        return 1 # Error
+
+def main():
+    sys.exit(cli_entry_point())
 
 if __name__ == "__main__":
     main()

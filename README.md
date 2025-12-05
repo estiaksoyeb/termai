@@ -71,6 +71,7 @@ This opens config.json in nano. It looks like this:
 {
     "api_key": "YOUR_SAVED_KEY",
     "model_name": "gemini-2.5-flash",
+    "proxy": "http://user:pass@127.0.0.1:1080",
     "system_instruction": "You are a CLI assistant...",
     "generation_config": {
         "temperature": 0.7, 
@@ -80,6 +81,7 @@ This opens config.json in nano. It looks like this:
 ```
 
  * model_name: Change to gemini-2.5-pro or other available models.
+ * proxy: (Optional) Set an HTTP or HTTPS proxy. Leave blank if you don't need one.
  * system_instruction: Give the AI a persona (e.g., "You are a rude pirate").
  * temperature: Set to 1.0 for creative answers, 0.1 for precise logic.
 ## ❓ Help & Troubleshooting
