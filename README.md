@@ -60,30 +60,48 @@ ai "Write a Python hello world script" > hello.py
 ```
 
 ## ⚙️ Configuration
-Termai comes with a built-in configuration editor. You can change the AI's personality, the model version, or the creativity (temperature).
+Termai comes with a built-in configuration editor. You can change the AI provider, model, and personality.
 Run:
 ```bash
 ai --config
 ```
 
-This opens config.json in nano. It looks like this:
+This opens `config.json` in `nano`. It looks like this:
 ```json
 {
-    "api_key": "YOUR_SAVED_KEY",
-    "model_name": "gemini-2.5-flash",
+    "provider": "gemini",
     "proxy": "http://user:pass@127.0.0.1:1080",
-    "system_instruction": "You are a CLI assistant...",
-    "generation_config": {
-        "temperature": 0.7, 
-        "maxOutputTokens": 1024
+    "gemini_config": {
+        "api_key": "YOUR_GEMINI_KEY",
+        "model_name": "gemini-2.5-flash",
+        "system_instruction": "You are a CLI assistant for Termux...",
+        "generation_config": {
+            "temperature": 0.7,
+            "maxOutputTokens": 1024
+        }
+    },
+    "openai_config": {
+        "api_key": "YOUR_OPENAI_KEY",
+        "model_name": "gpt-4o",
+        "system_instruction": "You are a helpful assistant.",
+        "temperature": 0.7,
+        "max_tokens": 1024
     }
 }
 ```
 
- * model_name: Change to gemini-2.5-pro or other available models.
- * proxy: (Optional) Set an HTTP or HTTPS proxy. Leave blank if you don't need one.
- * system_instruction: Give the AI a persona (e.g., "You are a rude pirate").
- * temperature: Set to 1.0 for creative answers, 0.1 for precise logic.
+*   **`provider`**: Set to `"gemini"` or `"openai"` to choose your AI provider.
+*   **`proxy`**: (Optional) Set an HTTP or HTTPS proxy for all requests.
+*   **`gemini_config`**: Settings for when `provider` is `"gemini"`.
+    *   `model_name`: Change to `gemini-2.5-pro` or other available models.
+    *   `system_instruction`: Give the AI a persona.
+    *   `temperature`: Set to `1.0` for creative answers, `0.1` for precise logic.
+*   **`openai_config`**: Settings for when `provider` is `"openai"`.
+    *   `model_name`: Change to `gpt-3.5-turbo`, etc.
+    *   `system_instruction`: A different persona for ChatGPT.
+    *   `temperature`: Controls randomness.
+    *   `max_tokens`: The maximum number of tokens to generate.
+
 ## ❓ Help & Troubleshooting
 **Command List:**
 ```bash
