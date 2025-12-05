@@ -22,7 +22,14 @@ fi
 # 2. Install Dependencies
 echo -e "${YELLOW}[*] Installing dependencies (python, requests)...${RESET}"
 pkg install python -y &> /dev/null
-pip install requests &> /dev/null
+
+# Check if requests is installed before trying to install it
+if ! pip show requests &> /dev/null; then
+    echo "    'requests' not found. Installing..."
+    pip install requests &> /dev/null
+else
+    echo "    'requests' is already installed."
+fi
 
 # 3. Create Hidden Program Directory
 echo -e "${YELLOW}[*] Creating installation directory: $INSTALL_DIR${RESET}"
