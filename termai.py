@@ -199,6 +199,7 @@ def print_help():
     
     print(f"\n{YELLOW}Options:{RESET}")
     print(f"  {CYAN}-i, --chat, chat{RESET} Start an interactive chat session")
+    print(f"  {CYAN}-m, --model [name]{RESET} List available Gemini models or set a specific one")
     print(f"  {CYAN}--config{RESET}        Open configuration file")
     print(f"  {CYAN}--debug{RESET}         Enable debug mode")
     print(f"  {CYAN}--debug-config{RESET}  Print the loaded configuration (redacts keys)")
@@ -208,9 +209,102 @@ def print_help():
     print(f"\n{YELLOW}Examples:{RESET}")
     print(f"  ai \"How do I unzip a tar file?\"")
     print(f"  ai chat")
+    print(f"  ai --model")
+    print(f"  ai -m gemini-2.5-pro")
     print(f"  ai -i \"Let's talk about Python\"")
     print(f"  cat error.log | ai \"Explain this error briefly\"")
     return 0 # Return 0 for success
+
+def handle_model_option(config):
+    """Fetches and displays available Gemini models interactively, or directly sets the model if specified."""
+    provider = config.get("provider", "gemini")
+    if provider != "gemini":
+        print(f"{YELLOW}[*] Model listing/switching is currently supported for the Gemini provider.{RESET}")
+        return 0
+
+    gemini_config = config.get("gemini_config", {})
+    api_key = gemini_config.get("api_key")
+    current_model = gemini_config.get("model_name", "gemini-2.5-flash")
+
+    # Check if a model argument is provided after the flag
+    model_arg = ""
+    model_flags = ["--model", "-m"]
+    for i, arg in enumerate(sys.argv):
+        if arg in model_flags and i + 1 < len(sys.argv):
+            # Ensure it is not another flag
+            if not sys.argv[i + 1].startswith("-"):
+                model_arg = sys.argv[i + 1].strip()
+                break
+
+    if model_arg:
+        clean_model = model_arg.replace("models/", "")
+        config["gemini_config"]["model_name"] = clean_model
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=4)
+        print(f"{GREEN}[✓] Gemini model updated successfully to: {clean_model}{RESET}")
+        return 0
+
+    if not api_key:
+        print(f"{RED}[Error] Gemini API key not found. Please set your key first using `ai --reinstall`.{RESET}")
+        return 1
+
+    print(f"{BLUE}[*] Fetching available models from Gemini API...{RESET}")
+    api_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+    try:
+        response = requests.get(api_url)
+        if response.status_code != 200:
+            print(f"{RED}[Error {response.status_code}] Failed to fetch models: {response.text}{RESET}")
+            return 1
+        data = response.json()
+        models = data.get("models", [])
+        
+        generation_models = []
+        for m in models:
+            name = m.get("name", "")
+            if "generateContent" in m.get("supportedGenerationMethods", []):
+                short_name = name.replace("models/", "")
+                display_name = m.get("displayName", short_name)
+                desc = m.get("description", "No description available.")
+                generation_models.append({
+                    "name": short_name,
+                    "displayName": display_name,
+                    "description": desc
+                })
+
+        if not generation_models:
+            print(f"{YELLOW}[!] No text generation models returned from Gemini API.{RESET}")
+            return 0
+
+        print(f"\n{BLUE}🔍 Available Gemini Text Models:{RESET}")
+        for idx, m in enumerate(generation_models, 1):
+            is_current = f" {GREEN}(active){RESET}" if m["name"] == current_model else ""
+            print(f"  {CYAN}{idx}. {m['displayName']}{RESET} [{YELLOW}{m['name']}{RESET}]{is_current}")
+            print(f"     {m['description']}")
+            print()
+
+        try:
+            choice = input(f"Select a model number to set as active (or press Enter to cancel): ").strip()
+            if not choice:
+                print("Cancelled.")
+                return 0
+            choice_idx = int(choice) - 1
+            if 0 <= choice_idx < len(generation_models):
+                selected_model = generation_models[choice_idx]["name"]
+                config["gemini_config"]["model_name"] = selected_model
+                with open(CONFIG_FILE, "w") as f:
+                    json.dump(config, f, indent=4)
+                print(f"{GREEN}[✓] Gemini model successfully updated to: {selected_model}{RESET}")
+            else:
+                print(f"{RED}[!] Invalid choice.{RESET}")
+        except ValueError:
+            print(f"{RED}[!] Invalid number entered.{RESET}")
+        except (KeyboardInterrupt, EOFError):
+            print("\nCancelled.")
+            
+        return 0
+    except Exception as e:
+        print(f"{RED}[Connection Error] Failed to contact Gemini API: {e}{RESET}")
+        return 1
 
 def render_markdown(text):
     """Renders basic Markdown beautifully in terminal using ANSI escape codes, with an optional rich-library fallback."""
@@ -436,11 +530,31 @@ def cli_entry_point():
     if "--config" in sys.argv:
         return open_editor()
 
+    if "--model" in sys.argv or "-m" in sys.argv:
+        return handle_model_option(config)
+
     debug_mode = "--debug" in sys.argv
     chat_mode = any(x in sys.argv for x in ["--chat", "-i", "chat"])
     
     chat_flags = ["--chat", "-i", "chat"]
-    args = [arg for arg in sys.argv[1:] if arg not in ["--debug", "--config", "--help", "-h", "--reinstall", "--debug-config"] + chat_flags]
+    model_flags = ["--model", "-m"]
+    
+    # Filter out configuration, help, reinstall, chat, and model flags/arguments
+    filtered_args = []
+    skip = False
+    for idx, arg in enumerate(sys.argv[1:]):
+        if skip:
+            skip = False
+            continue
+        if arg in model_flags:
+            # If the next item is not another option, it's the model name, so skip it from prompt args
+            if idx + 2 < len(sys.argv) and not sys.argv[idx + 2].startswith("-"):
+                skip = True
+            continue
+        if arg in ["--debug", "--config", "--help", "-h", "--reinstall", "--debug-config"] + chat_flags:
+            continue
+        filtered_args.append(arg)
+    args = filtered_args
 
     # Handle interactive chat session mode
     if chat_mode:
