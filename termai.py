@@ -465,15 +465,23 @@ def cli_entry_point():
         print(f"Type {YELLOW}exit{RESET} or {YELLOW}quit{RESET} (or Ctrl+D) to end the chat.\n")
         
         history = []
-        initial_prompt = piped_content
-        if args:
-            if initial_prompt:
-                initial_prompt += "\n" + " ".join(args)
+        initial_prompt = ""
+        display_prompt = ""
+        
+        if piped_content:
+            if args:
+                user_question = " ".join(args)
+                initial_prompt = f"Context:\n```\n{piped_content}\n```\n\nQuestion: {user_question}"
+                display_prompt = f"[Piped Context] + {user_question}"
             else:
-                initial_prompt = " ".join(args)
+                initial_prompt = f"I have provided some context below. Please acknowledge receipt of this context, briefly summarize it, and wait for my questions about it.\n\nContext:\n```\n{piped_content}\n```"
+                display_prompt = "[Piped Context] (Awaiting your questions)"
+        elif args:
+            initial_prompt = " ".join(args)
+            display_prompt = initial_prompt
 
         if initial_prompt:
-            print(f"You {CYAN}>>>{RESET} {initial_prompt}")
+            print(f"You {CYAN}>>>{RESET} {display_prompt}")
             if provider == "gemini":
                 history.append({"role": "user", "parts": [{"text": initial_prompt}]})
                 status = send_gemini_request(config, "", debug_mode, history=history)
