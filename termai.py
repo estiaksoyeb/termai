@@ -16,10 +16,16 @@ CONFIG_FILE = DATA_DIR / "config.json"
 OLD_KEY_FILE = DATA_DIR / "key"
 
 # --- Colors ---
-GREEN = "\033[92m"
-CYAN = "\033[96m"
-YELLOW = "\033[93m"
-RESET = "\033[0m"
+if sys.stdout.isatty():
+    GREEN = "\033[92m"
+    CYAN = "\033[96m"
+    YELLOW = "\033[93m"
+    RESET = "\033[0m"
+else:
+    GREEN = ""
+    CYAN = ""
+    YELLOW = ""
+    RESET = ""
 
 # --- Default Settings ---
 # If the config file is deleted/missing, these values are used to recreate it.

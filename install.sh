@@ -2,7 +2,16 @@
 
 # Define paths
 INSTALL_DIR="$HOME/.programs/termai"
-BIN_DIR="$PREFIX/bin"
+if [ -n "$PREFIX" ]; then
+    BIN_DIR="$PREFIX/bin"
+else
+    BIN_DIR="$HOME/.local/bin"
+    # Ensure standard local bin directory exists and warn if not in PATH
+    mkdir -p "$BIN_DIR"
+    if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
+        echo -e "\033[1;33m[*] Note: $BIN_DIR is not in your PATH. You may need to add it to ~/.bashrc or ~/.zshrc\033[0m"
+    fi
+fi
 SOURCE_FILE="termai.py"
 
 # Colors
@@ -14,13 +23,23 @@ RESET="\033[0m"
 
 echo -e "${BLUE}[+] Starting Termai Installer...${RESET}"
 
+# Detect Python command
+if command -v python3 &> /dev/null; then
+    PYTHON_CMD="python3"
+elif command -v python &> /dev/null; then
+    PYTHON_CMD="python"
+else
+    echo -e "${RED}[!] Error: Python is not installed. Please install Python 3.${RESET}"
+    exit 1
+fi
+
 # 1. Install Dependencies
 echo -e "${YELLOW}[*] Installing dependencies (python, requests)...${RESET}"
 
 # Check if requests is installed before trying to install it
-if ! pip show requests &> /dev/null; then
+if ! $PYTHON_CMD -c "import requests" &> /dev/null; then
     echo "    'requests' not found. Installing..."
-    pip install requests &> /dev/null
+    $PYTHON_CMD -m pip install requests &> /dev/null || $PYTHON_CMD -m pip install requests --break-system-packages &> /dev/null
 else
     echo "    'requests' is already installed."
 fi
@@ -41,7 +60,7 @@ fi
 # 5. Create Binary Alias ('ai')
 echo -e "${YELLOW}[*] Creating 'ai' command in $BIN_DIR...${RESET}"
 echo '#!/bin/bash' > "$BIN_DIR/ai"
-echo "python \"$INSTALL_DIR/$SOURCE_FILE\" \"\$@\"" >> "$BIN_DIR/ai"
+echo "$PYTHON_CMD \"$INSTALL_DIR/$SOURCE_FILE\" \"\$@\"" >> "$BIN_DIR/ai"
 chmod +x "$BIN_DIR/ai"
 
 # 6. Verify Installation
@@ -49,6 +68,12 @@ if command -v ai &> /dev/null; then
     echo -e "${GREEN}[✓] Termai installed successfully!${RESET}"
     echo "    Type 'ai \"hello\"' to start."
     echo "    Type 'ai --help' to see commands."
+elif [ -f "$BIN_DIR/ai" ]; then
+    echo -e "${GREEN}[✓] Termai installed successfully at $BIN_DIR/ai!${RESET}"
+    echo -e "${YELLOW}[!] However, $BIN_DIR is not in your PATH.${RESET}"
+    echo "    To run it anywhere, add this to your ~/.bashrc or ~/.zshrc:"
+    echo "    export PATH=\"\$PATH:$BIN_DIR\""
+    echo "    After adding, restart your terminal or run: source ~/.bashrc"
 else
     echo -e "${RED}[!] Installation failed. 'ai' command not found.${RESET}"
     exit 1
