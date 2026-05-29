@@ -20,11 +20,15 @@ if sys.stdout.isatty():
     GREEN = "\033[92m"
     CYAN = "\033[96m"
     YELLOW = "\033[93m"
+    RED = "\033[91m"
+    BLUE = "\033[94m"
     RESET = "\033[0m"
 else:
     GREEN = ""
     CYAN = ""
     YELLOW = ""
+    RED = ""
+    BLUE = ""
     RESET = ""
 
 # --- Default Settings ---
@@ -182,6 +186,7 @@ def print_help():
     print(f"  cat file.txt | ai [OPTIONS] \"OPTIONAL PROMPT\"")
     
     print(f"\n{YELLOW}Options:{RESET}")
+    print(f"  {CYAN}-i, --chat, chat{RESET} Start an interactive chat session")
     print(f"  {CYAN}--config{RESET}        Open configuration file")
     print(f"  {CYAN}--debug{RESET}         Enable debug mode")
     print(f"  {CYAN}--debug-config{RESET}  Print the loaded configuration (redacts keys)")
@@ -190,12 +195,12 @@ def print_help():
     
     print(f"\n{YELLOW}Examples:{RESET}")
     print(f"  ai \"How do I unzip a tar file?\"")
-    print(f"  ai --config")
+    print(f"  ai chat")
+    print(f"  ai -i \"Let's talk about Python\"")
     print(f"  cat error.log | ai \"Explain this error briefly\"")
     return 0 # Return 0 for success
 
-def send_gemini_request(config, user_input, debug_mode):
-    # ... (existing code for send_gemini_request)
+def send_gemini_request(config, user_input, debug_mode, history=None):
     gemini_config = config.get("gemini_config", {})
     api_key = gemini_config.get("api_key")
     model_name = gemini_config.get("model_name", "gemini-2.5-flash")
@@ -203,8 +208,10 @@ def send_gemini_request(config, user_input, debug_mode):
     gen_config = gemini_config.get("generation_config", {})
     proxy = config.get("proxy", "")
     api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+    
+    payload_contents = history if history is not None else [{"parts": [{"text": user_input}]}]
     payload = {
-        "contents": [{"parts": [{"text": user_input}]}],
+        "contents": payload_contents,
         "systemInstruction": {"parts": [{"text": system_instr}]},
         "generationConfig": gen_config
     }
@@ -229,7 +236,10 @@ def send_gemini_request(config, user_input, debug_mode):
         if "candidates" in data and data["candidates"]:
             cand = data["candidates"][0]
             if "content" in cand and "parts" in cand["content"] and cand["content"]["parts"]:
-                print(f"{GREEN}{cand['content']['parts'][0]['text'].strip()}{RESET}")
+                response_text = cand['content']['parts'][0]['text']
+                print(f"{GREEN}{response_text.strip()}{RESET}")
+                if history is not None:
+                    history.append({"role": "model", "parts": [{"text": response_text}]})
             else:
                 print("[No content returned]")
                 if debug_mode: print(data)
@@ -241,8 +251,7 @@ def send_gemini_request(config, user_input, debug_mode):
         print(f"\n[Connection Error] {e}")
         return 1
 
-def send_openai_request(config, user_input, debug_mode):
-    # ... (existing code for send_openai_request)
+def send_openai_request(config, user_input, debug_mode, history=None):
     openai_config = config.get("openai_config", {})
     api_key = openai_config.get("api_key")
     model_name = openai_config.get("model_name", "gpt-4o")
@@ -255,12 +264,18 @@ def send_openai_request(config, user_input, debug_mode):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
-    payload = {
-        "model": model_name,
-        "messages": [
+    
+    if history is not None:
+        payload_messages = [{"role": "system", "content": system_instr}] + history
+    else:
+        payload_messages = [
             {"role": "system", "content": system_instr},
             {"role": "user", "content": user_input}
-        ],
+        ]
+
+    payload = {
+        "model": model_name,
+        "messages": payload_messages,
         "temperature": temperature,
         "max_tokens": max_tokens
     }
@@ -284,6 +299,8 @@ def send_openai_request(config, user_input, debug_mode):
             content = message.get("content", "")
             if content:
                 print(f"{GREEN}{content.strip()}{RESET}")
+                if history is not None:
+                    history.append({"role": "assistant", "content": content})
             else:
                 print("[No content returned]")
                 if debug_mode: print(data)
@@ -337,7 +354,59 @@ def cli_entry_point():
         return open_editor()
 
     debug_mode = "--debug" in sys.argv
-    args = [arg for arg in sys.argv[1:] if arg not in ["--debug", "--config", "--help", "-h", "--reinstall", "--debug-config"]]
+    chat_mode = any(x in sys.argv for x in ["--chat", "-i", "chat"])
+    
+    chat_flags = ["--chat", "-i", "chat"]
+    args = [arg for arg in sys.argv[1:] if arg not in ["--debug", "--config", "--help", "-h", "--reinstall", "--debug-config"] + chat_flags]
+
+    # Handle interactive chat session mode
+    if chat_mode:
+        provider = config.get("provider", "gemini")
+        if provider == "gemini":
+            model_name = config.get("gemini_config", {}).get("model_name", "gemini-2.5-flash")
+        else:
+            model_name = config.get("openai_config", {}).get("model_name", "gpt-4o")
+            
+        print(f"\n{BLUE}💬 Termai Interactive Chat Session{RESET}")
+        print(f"Using Provider: {YELLOW}{provider.capitalize()}{RESET} | Model: {CYAN}{model_name}{RESET}")
+        print(f"Type {YELLOW}exit{RESET} or {YELLOW}quit{RESET} (or Ctrl+D) to end the chat.\n")
+        
+        history = []
+        if args:
+            initial_prompt = " ".join(args)
+            print(f"You {CYAN}>>>{RESET} {initial_prompt}")
+            if provider == "gemini":
+                history.append({"role": "user", "parts": [{"text": initial_prompt}]})
+                status = send_gemini_request(config, "", debug_mode, history=history)
+            else:
+                history.append({"role": "user", "content": initial_prompt})
+                status = send_openai_request(config, "", debug_mode, history=history)
+            
+            if status != 0:
+                print(f"{RED}[Error] Failed to get response. Continuing session...{RESET}")
+                
+        while True:
+            try:
+                user_input = input(f"\nYou {CYAN}>>>{RESET} ").strip()
+                if not user_input:
+                    continue
+                if user_input.lower() in ["exit", "quit"]:
+                    print(f"\n{YELLOW}Goodbye!{RESET}")
+                    break
+                
+                if provider == "gemini":
+                    history.append({"role": "user", "parts": [{"text": user_input}]})
+                    status = send_gemini_request(config, "", debug_mode, history=history)
+                else:
+                    history.append({"role": "user", "content": user_input})
+                    status = send_openai_request(config, "", debug_mode, history=history)
+                    
+                if status != 0:
+                    print(f"{RED}[Error] Failed to get response. Continuing session...{RESET}")
+            except (KeyboardInterrupt, EOFError):
+                print(f"\n{YELLOW}Goodbye!{RESET}")
+                break
+        return 0
 
     user_input = ""
     if not sys.stdin.isatty():
