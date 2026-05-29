@@ -48,6 +48,7 @@ DEFAULT_CONFIG = {
         }
     },
     "openai_config": {
+        "base_url": "https://api.openai.com/v1",
         "api_key": "",
         "model_name": "gpt-4o",
         "system_instruction": "You are a CLI assistant for command-line users. Answer concisely and use clear formatting. Use standard Markdown for headers, bolding, bullet points, and code blocks.",
@@ -95,14 +96,12 @@ def load_config():
             print("Migration complete.")
             return new_config
 
-        # Modernize legacy restrictive system instructions
+        # Modernize existing configuration files to add base_url to openai_config if missing
         updated = False
-        for cfg_name in ["gemini_config", "openai_config"]:
-            if cfg_name in config:
-                sys_instr = config[cfg_name].get("system_instruction", "")
-                if "Do NOT use Markdown" in sys_instr or "Do NOT use backticks" in sys_instr:
-                    config[cfg_name]["system_instruction"] = DEFAULT_CONFIG[cfg_name]["system_instruction"]
-                    updated = True
+        if "openai_config" in config and "base_url" not in config["openai_config"]:
+            config["openai_config"]["base_url"] = DEFAULT_CONFIG["openai_config"]["base_url"]
+            updated = True
+
         if updated:
             with open(CONFIG_FILE, "w") as f:
                 json.dump(config, f, indent=4)
@@ -139,12 +138,22 @@ def load_config():
         
         elif provider == "2":
             new_config["provider"] = "openai"
-            print(f"[{APP_NAME}] Enter your OpenAI API Key. Get it from platform.openai.com")
-            openai_api_key = input("OpenAI API Key: ").strip()
+            print(f"[{APP_NAME}] Enter OpenAI Base URL (Press Enter for default: https://api.openai.com/v1)")
+            base_url = input("Base URL: ").strip()
+            if base_url:
+                new_config["openai_config"]["base_url"] = base_url
+            
+            print(f"[{APP_NAME}] Enter your OpenAI or custom API Key.")
+            openai_api_key = input("API Key: ").strip()
             if not openai_api_key:
-                print("Error: OpenAI key cannot be empty.")
+                print("Error: API Key cannot be empty.")
                 sys.exit(1)
             new_config["openai_config"]["api_key"] = openai_api_key
+            
+            print(f"[{APP_NAME}] Enter Model Name (Press Enter for default: gpt-4o)")
+            model_name = input("Model Name: ").strip()
+            if model_name:
+                new_config["openai_config"]["model_name"] = model_name
     else:
         # Default to Gemini if non-interactive and no config exists
         # This part might need adjustment based on desired non-interactive behavior
@@ -435,7 +444,16 @@ def send_openai_request(config, user_input, debug_mode, history=None):
     temperature = openai_config.get("temperature", 0.7)
     max_tokens = openai_config.get("max_tokens", 1024)
     proxy = config.get("proxy", "")
-    api_url = "https://api.openai.com/v1/chat/completions"
+    base_url = openai_config.get("base_url", "https://api.openai.com/v1")
+    # Form the completions endpoint URL robustly
+    if base_url.endswith("/"):
+        base_url = base_url[:-1]
+    
+    if base_url.endswith("/chat/completions"):
+        api_url = base_url
+    else:
+        api_url = f"{base_url}/chat/completions"
+        
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
