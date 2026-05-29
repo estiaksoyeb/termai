@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
     "gemini_config": {
         "api_key": "",
         "model_name": "gemini-2.5-flash",
-        "system_instruction": "You are a CLI assistant for command-line users. Do NOT use Markdown. Do NOT use backticks. Do NOT use bolding. Just write plain text. Keep answers concise.",
+        "system_instruction": "You are a CLI assistant for command-line users. Answer concisely and use clear formatting. Use standard Markdown for headers, bolding, bullet points, and code blocks.",
         "generation_config": {
             "temperature": 0.7,
             "top_p": 0.9,
@@ -50,7 +50,7 @@ DEFAULT_CONFIG = {
     "openai_config": {
         "api_key": "",
         "model_name": "gpt-4o",
-        "system_instruction": "You are a CLI assistant for command-line users. Do NOT use Markdown. Do NOT use backticks. Do NOT use bolding. Just write plain text. Keep answers concise.",
+        "system_instruction": "You are a CLI assistant for command-line users. Answer concisely and use clear formatting. Use standard Markdown for headers, bolding, bullet points, and code blocks.",
         "temperature": 0.7,
         "max_tokens": 1024
     }
@@ -94,6 +94,18 @@ def load_config():
                 json.dump(new_config, f, indent=4)
             print("Migration complete.")
             return new_config
+
+        # Modernize legacy restrictive system instructions
+        updated = False
+        for cfg_name in ["gemini_config", "openai_config"]:
+            if cfg_name in config:
+                sys_instr = config[cfg_name].get("system_instruction", "")
+                if "Do NOT use Markdown" in sys_instr or "Do NOT use backticks" in sys_instr:
+                    config[cfg_name]["system_instruction"] = DEFAULT_CONFIG[cfg_name]["system_instruction"]
+                    updated = True
+        if updated:
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(config, f, indent=4)
 
         return config
 
@@ -200,6 +212,75 @@ def print_help():
     print(f"  cat error.log | ai \"Explain this error briefly\"")
     return 0 # Return 0 for success
 
+def render_markdown(text):
+    """Renders basic Markdown beautifully in terminal using ANSI escape codes, with an optional rich-library fallback."""
+    if not sys.stdout.isatty():
+        return text
+
+    # Try to use rich library if available
+    try:
+        from rich.console import Console
+        from rich.markdown import Markdown
+        import io
+        string_io = io.StringIO()
+        console = Console(file=string_io, force_terminal=True)
+        console.print(Markdown(text))
+        return string_io.getvalue().strip()
+    except ImportError:
+        pass
+
+    # High-fidelity custom ANSI renderer fallback
+    lines = text.split("\n")
+    rendered_lines = []
+    in_code_block = False
+    code_lang = ""
+
+    for line in lines:
+        # 1. Handle Code Block boundaries
+        if line.strip().startswith("```"):
+            if not in_code_block:
+                in_code_block = True
+                code_lang = line.strip()[3:].strip()
+                lang_str = f" {code_lang.upper()} " if code_lang else " CODE "
+                border = f"\033[96m┌──────────────────{lang_str}──────────────────\033[0m"
+                rendered_lines.append(border)
+            else:
+                in_code_block = False
+                border = "\033[96m└───────────────────────────────────────────────\033[0m"
+                rendered_lines.append(border)
+            continue
+
+        # 2. Inside Code Block
+        if in_code_block:
+            rendered_lines.append(f"\033[93m{line}\033[0m")
+            continue
+
+        # 3. Headers (# Header, ## Header, etc.)
+        if line.strip().startswith("#"):
+            stripped = line.strip()
+            header_text = stripped.lstrip("#").strip()
+            rendered_lines.append(f"\033[1;96m✦ {header_text}\033[0m")
+            continue
+
+        # 4. Bullet Points (* item, - item, etc.)
+        stripped_line = line.lstrip()
+        indent = line[:len(line) - len(stripped_line)]
+        if stripped_line.startswith("* ") or stripped_line.startswith("- ") or stripped_line.startswith("+ "):
+            bullet_text = stripped_line[2:]
+            rendered_lines.append(f"{indent}\033[92m•\033[0m {bullet_text}")
+            continue
+
+        # 5. Inline formatting (Bold, Italic, Inline Code)
+        formatted_line = line
+        import re
+        formatted_line = re.sub(r'`([^`]+)`', r'\033[96m\1\033[0m', formatted_line)
+        formatted_line = re.sub(r'\*\*([^*]+)\*\*', r'\033[1m\1\033[22m', formatted_line)
+        formatted_line = re.sub(r'\*([^*]+)\*', r'\033[3m\1\033[23m', formatted_line)
+
+        rendered_lines.append(formatted_line)
+
+    return "\n".join(rendered_lines)
+
 def send_gemini_request(config, user_input, debug_mode, history=None):
     gemini_config = config.get("gemini_config", {})
     api_key = gemini_config.get("api_key")
@@ -237,7 +318,8 @@ def send_gemini_request(config, user_input, debug_mode, history=None):
             cand = data["candidates"][0]
             if "content" in cand and "parts" in cand["content"] and cand["content"]["parts"]:
                 response_text = cand['content']['parts'][0]['text']
-                print(f"{GREEN}{response_text.strip()}{RESET}")
+                rendered_text = render_markdown(response_text)
+                print(rendered_text.strip())
                 if history is not None:
                     history.append({"role": "model", "parts": [{"text": response_text}]})
             else:
@@ -298,7 +380,8 @@ def send_openai_request(config, user_input, debug_mode, history=None):
             message = data["choices"][0].get("message", {})
             content = message.get("content", "")
             if content:
-                print(f"{GREEN}{content.strip()}{RESET}")
+                rendered_text = render_markdown(content)
+                print(rendered_text.strip())
                 if history is not None:
                     history.append({"role": "assistant", "content": content})
             else:
