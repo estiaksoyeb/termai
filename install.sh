@@ -53,8 +53,16 @@ if [ -f "$SOURCE_FILE" ]; then
     cp "$SOURCE_FILE" "$INSTALL_DIR/"
     echo "    Source copied."
 else
-    echo -e "${RED}[!] Error: $SOURCE_FILE not found in current folder.${RESET}"
-    exit 1
+    echo -e "${YELLOW}[*] Source $SOURCE_FILE not found locally. Downloading from GitHub...${RESET}"
+    if command -v curl &> /dev/null; then
+        curl -fsSL "https://raw.githubusercontent.com/estiaksoyeb/termai/master/termai.py" -o "$INSTALL_DIR/$SOURCE_FILE"
+    elif command -v wget &> /dev/null; then
+        wget -qO "$INSTALL_DIR/$SOURCE_FILE" "https://raw.githubusercontent.com/estiaksoyeb/termai/master/termai.py"
+    else
+        echo -e "${RED}[!] Error: Neither curl nor wget is installed. Cannot download source files.${RESET}"
+        exit 1
+    fi
+    echo "    Source downloaded successfully."
 fi
 
 # 5. Create Binary Alias ('ai')
@@ -80,30 +88,35 @@ else
 fi
 
 # 7. Safe Cleanup (Interactive)
-echo ""
-echo -e "${BLUE}[?] Do you want to delete this installation folder to save space?${RESET}"
-echo -e "    (This deletes the repo you just cloned, NOT the installed tool)"
-read -p "    Delete? [y/N]: " confirm
+if [ -f "$SOURCE_FILE" ]; then
+    echo ""
+    echo -e "${BLUE}[?] Do you want to delete this installation folder to save space?${RESET}"
+    echo -e "    (This deletes the repo you just cloned, NOT the installed tool)"
+    read -p "    Delete? [y/N]: " confirm
 
-if [[ "$confirm" =~ ^[yY]$ ]]; then
-    CURRENT_DIR_NAME=$(basename "$PWD")
-    
-    # Enable case-insensitive matching
-    shopt -s nocasematch
-    
-    # SAFETY CHECK: Only delete if the folder is named 'termai' (case-insensitive)
-    if [[ "$CURRENT_DIR_NAME" == "termai" ]]; then
-        echo -e "${YELLOW}[*] Cleaning up...${RESET}"
-        cd ..
-        rm -rf "$CURRENT_DIR_NAME"
-        echo -e "${GREEN}[✓] Cleaned up. Enjoy Termai!${RESET}"
+    if [[ "$confirm" =~ ^[yY]$ ]]; then
+        CURRENT_DIR_NAME=$(basename "$PWD")
+        
+        # Enable case-insensitive matching
+        shopt -s nocasematch
+        
+        # SAFETY CHECK: Only delete if the folder is named 'termai' (case-insensitive)
+        if [[ "$CURRENT_DIR_NAME" == "termai" ]]; then
+            echo -e "${YELLOW}[*] Cleaning up...${RESET}"
+            cd ..
+            rm -rf "$CURRENT_DIR_NAME"
+            echo -e "${GREEN}[✓] Cleaned up. Enjoy Termai!${RESET}"
+        else
+            echo -e "${RED}[!] Safety Stop: Current folder is named '$CURRENT_DIR_NAME', not 'termai'.${RESET}"
+            echo "    Cleanup aborted to prevent accidental deletion of wrong files."
+        fi
+        
+        # Disable case-insensitive matching
+        shopt -u nocasematch
     else
-        echo -e "${RED}[!] Safety Stop: Current folder is named '$CURRENT_DIR_NAME', not 'termai'.${RESET}"
-        echo "    Cleanup aborted to prevent accidental deletion of wrong files."
+        echo -e "${GREEN}[✓] Setup complete. Files kept.${RESET}"
     fi
-    
-    # Disable case-insensitive matching
-    shopt -u nocasematch
 else
-    echo -e "${GREEN}[✓] Setup complete. Files kept.${RESET}"
+    echo ""
+    echo -e "${GREEN}[✓] Setup complete. Enjoy Termai!${RESET}"
 fi

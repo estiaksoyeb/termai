@@ -11,7 +11,15 @@ It brings the power of Large Language Models (LLMs) directly to your command lin
  * **🧹 Auto-Cleanup:** The installer sets everything up and deletes the repository to save space.
 
  ## 📥 Installation
-Open Termux and run the following commands:
+
+### ⚡ Quick One-Line Install
+Open your terminal and run:
+```bash
+curl -fsSL https://raw.githubusercontent.com/estiaksoyeb/termai/master/install.sh | bash
+```
+
+### 🛠 Alternative Manual Install
+Open Termux / Ubuntu and run the following commands:
 ```bash
 # 1. Clone the repository
 git clone https://github.com/estiaksoyeb/termai
