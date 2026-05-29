@@ -32,10 +32,10 @@ bash install.sh
 ```
 
 **What the installer does:**
- * Installs Python and required libraries.
- * Moves the core logic to a hidden folder (~/.programs/termai).
- * Creates a global ai command.
- * Self-Destructs: Deletes the downloaded source folder to keep your home directory clean.
+ * **Dependency Check:** Verifies if Python 3 is installed and automatically installs the required `requests` library.
+ * **Installs Core Logic:** Moves the script safely to a hidden directory (`~/.programs/termai`).
+ * **Creates Binary Alias:** Generates the global `ai` execution alias in your binary directory (`$PREFIX/bin` on Termux, or `$HOME/.local/bin` on standard Linux).
+ * **Optional Cleanup:** For manual installations, it offers to safely delete the cloned repository folder afterwards to save space.
 ## 🔑 Setup
 On the very first run, Termai will ask for your Google Gemini API Key.
  * Get a free API key here: Google AI Studio
