@@ -913,7 +913,11 @@ def cli_entry_point():
         return 1
 
 def main():
-    sys.exit(cli_entry_point())
+    try:
+        sys.exit(cli_entry_point())
+    except KeyboardInterrupt:
+        print("\nCancelled.")
+        sys.exit(130)
 
 if __name__ == "__main__":
     main()
