@@ -34,34 +34,37 @@ else:
 # --- Default Settings ---
 # If the config file is deleted/missing, these values are used to recreate it.
 DEFAULT_CONFIG = {
-    "provider": "gemini",
-    "proxy": "",
-    "gemini_config": {
-        "api_key": "",
-        "model_name": "gemini-2.5-flash",
-        "system_instruction": "You are a CLI assistant for command-line users. Answer concisely and use clear formatting. Use standard Markdown for headers, bolding, bullet points, and code blocks.",
-        "generation_config": {
+    "active_profile": "gemini-default",
+    "profiles": {
+        "gemini-default": {
+            "provider": "gemini",
+            "api_key": "",
+            "model_name": "gemini-2.5-flash",
+            "system_instruction": "You are a CLI assistant for command-line users. Answer concisely and use clear formatting. Use standard Markdown for headers, bolding, bullet points, and code blocks.",
+            "generation_config": {
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "top_k": 40,
+                "maxOutputTokens": 1024
+            }
+        },
+        "openai-default": {
+            "provider": "openai",
+            "base_url": "https://api.openai.com/v1",
+            "api_key": "",
+            "model_name": "gpt-4o",
+            "system_instruction": "You are a CLI assistant for command-line users. Answer concisely and use clear formatting. Use standard Markdown for headers, bolding, bullet points, and code blocks.",
             "temperature": 0.7,
-            "top_p": 0.9,
-            "top_k": 40,
-            "maxOutputTokens": 1024
+            "max_tokens": 1024
         }
     },
-    "openai_config": {
-        "base_url": "https://api.openai.com/v1",
-        "api_key": "",
-        "model_name": "gpt-4o",
-        "system_instruction": "You are a CLI assistant for command-line users. Answer concisely and use clear formatting. Use standard Markdown for headers, bolding, bullet points, and code blocks.",
-        "temperature": 0.7,
-        "max_tokens": 1024
-    }
+    "proxy": ""
 }
 
 def load_config():
     """
     Loads config.json. 
-    Handles migration from old 'key' file and old flat config structure if needed.
-    Creates default file if missing.
+    Handles migration from old nested structure and creates default file if missing.
     """
     # Ensure directory exists
     if not DATA_DIR.exists():
@@ -78,30 +81,63 @@ def load_config():
             print("Please fix it or delete it to reset defaults.")
             sys.exit(1)
 
-        # Migration from old flat structure to new nested structure
-        if "api_key" in config:
-            print(f"[{APP_NAME}] Migrating config to new nested structure...")
+        # Migration from old static structure to profile-based structure
+        if "profiles" not in config:
+            print(f"[{APP_NAME}] Migrating config to profile-based structure...")
+            old_provider = config.get("provider", "gemini")
+            old_proxy = config.get("proxy", "")
+            
             new_config = copy.deepcopy(DEFAULT_CONFIG)
-            # Preserve old top-level keys
-            new_config["proxy"] = config.get("proxy", "")
+            new_config["proxy"] = old_proxy
             
-            # Move gemini-specific keys
-            new_config["gemini_config"]["api_key"] = config.get("api_key", "")
-            new_config["gemini_config"]["model_name"] = config.get("model_name", DEFAULT_CONFIG["gemini_config"]["model_name"])
-            new_config["gemini_config"]["system_instruction"] = config.get("system_instruction", DEFAULT_CONFIG["gemini_config"]["system_instruction"])
-            new_config["gemini_config"]["generation_config"] = config.get("generation_config", DEFAULT_CONFIG["gemini_config"]["generation_config"])
+            if "gemini_config" in config:
+                new_config["profiles"]["gemini-default"] = {
+                    "provider": "gemini",
+                    "api_key": config["gemini_config"].get("api_key", ""),
+                    "model_name": config["gemini_config"].get("model_name", "gemini-2.5-flash"),
+                    "system_instruction": config["gemini_config"].get("system_instruction", DEFAULT_CONFIG["profiles"]["gemini-default"]["system_instruction"]),
+                    "generation_config": config["gemini_config"].get("generation_config", DEFAULT_CONFIG["profiles"]["gemini-default"]["generation_config"])
+                }
             
+            if "openai_config" in config:
+                new_config["profiles"]["openai-default"] = {
+                    "provider": "openai",
+                    "base_url": config["openai_config"].get("base_url", "https://api.openai.com/v1"),
+                    "api_key": config["openai_config"].get("api_key", ""),
+                    "model_name": config["openai_config"].get("model_name", "gpt-4o"),
+                    "system_instruction": config["openai_config"].get("system_instruction", DEFAULT_CONFIG["profiles"]["openai-default"]["system_instruction"]),
+                    "temperature": config["openai_config"].get("temperature", 0.7),
+                    "max_tokens": config["openai_config"].get("max_tokens", 1024)
+                }
+            
+            if old_provider == "openai":
+                new_config["active_profile"] = "openai-default"
+            else:
+                new_config["active_profile"] = "gemini-default"
+                
+            config = new_config
             with open(CONFIG_FILE, "w") as f:
-                json.dump(new_config, f, indent=4)
+                json.dump(config, f, indent=4)
             print("Migration complete.")
             return new_config
 
-        # Modernize existing configuration files to add base_url to openai_config if missing
+        # Modernize profiles to have base_url if they are openai provider and missing base_url
         updated = False
-        if "openai_config" in config and "base_url" not in config["openai_config"]:
-            config["openai_config"]["base_url"] = DEFAULT_CONFIG["openai_config"]["base_url"]
-            updated = True
-
+        if "profiles" in config:
+            for p_name, p_config in config["profiles"].items():
+                if p_config.get("provider") == "openai" and "base_url" not in p_config:
+                    p_config["base_url"] = "https://api.openai.com/v1"
+                    updated = True
+                
+                # Check for restrictive legacy system instruction
+                sys_instr = p_config.get("system_instruction", "")
+                if "Do NOT use Markdown" in sys_instr or "Do NOT use backticks" in sys_instr:
+                    if p_config.get("provider") == "gemini":
+                        p_config["system_instruction"] = DEFAULT_CONFIG["profiles"]["gemini-default"]["system_instruction"]
+                    else:
+                        p_config["system_instruction"] = DEFAULT_CONFIG["profiles"]["openai-default"]["system_instruction"]
+                    updated = True
+        
         if updated:
             with open(CONFIG_FILE, "w") as f:
                 json.dump(config, f, indent=4)
@@ -127,39 +163,38 @@ def load_config():
             provider = input("Enter 1 for Gemini or 2 for OpenAI: ").strip()
 
         if provider == "1":
-            new_config["provider"] = "gemini"
+            new_config["active_profile"] = "gemini-default"
             if not gemini_api_key:
                 print(f"[{APP_NAME}] Enter your Gemini API Key. Get it from aistudio.google.com")
                 gemini_api_key = input("Gemini API Key: ").strip()
                 if not gemini_api_key:
                     print("Error: Gemini key cannot be empty.")
                     sys.exit(1)
-            new_config["gemini_config"]["api_key"] = gemini_api_key
+            new_config["profiles"]["gemini-default"]["api_key"] = gemini_api_key
         
         elif provider == "2":
-            new_config["provider"] = "openai"
+            new_config["active_profile"] = "openai-default"
             print(f"[{APP_NAME}] Enter OpenAI Base URL (Press Enter for default: https://api.openai.com/v1)")
             base_url = input("Base URL: ").strip()
             if base_url:
-                new_config["openai_config"]["base_url"] = base_url
+                new_config["profiles"]["openai-default"]["base_url"] = base_url
             
             print(f"[{APP_NAME}] Enter your OpenAI or custom API Key.")
             openai_api_key = input("API Key: ").strip()
             if not openai_api_key:
                 print("Error: API Key cannot be empty.")
                 sys.exit(1)
-            new_config["openai_config"]["api_key"] = openai_api_key
+            new_config["profiles"]["openai-default"]["api_key"] = openai_api_key
             
             print(f"[{APP_NAME}] Enter Model Name (Press Enter for default: gpt-4o)")
             model_name = input("Model Name: ").strip()
             if model_name:
-                new_config["openai_config"]["model_name"] = model_name
+                new_config["profiles"]["openai-default"]["model_name"] = model_name
     else:
         # Default to Gemini if non-interactive and no config exists
-        # This part might need adjustment based on desired non-interactive behavior
         if not gemini_api_key:
              return None # Cannot proceed without an API key
-        new_config["gemini_config"]["api_key"] = gemini_api_key
+        new_config["profiles"]["gemini-default"]["api_key"] = gemini_api_key
 
     # Save the new configuration
     with open(CONFIG_FILE, "w") as f:
@@ -174,10 +209,7 @@ def load_config():
     return new_config
 
 def open_editor():
-    """
-    Opens the config file in the user's preferred editor with a fallback mechanism.
-    Priority: $EDITOR > vim > nano
-    """
+    """Opens config.json in the user's terminal editor."""
     # 1. Prioritize the user's explicit choice
     editor = os.getenv('EDITOR')
 
@@ -208,7 +240,12 @@ def print_help():
     
     print(f"\n{YELLOW}Options:{RESET}")
     print(f"  {CYAN}-i, --chat, chat{RESET} Start an interactive chat session")
+    print(f"  {CYAN}-p, --profile [name]{RESET} Run query using or switching temporarily to a profile")
     print(f"  {CYAN}-m, --model [name]{RESET} List available Gemini models or set a specific one")
+    print(f"  {CYAN}--profiles{RESET}      List all configured profiles")
+    print(f"  {CYAN}--use [name]{RESET}     Set a profile as the active default (interactive if no name)")
+    print(f"  {CYAN}--profile-add <name>{RESET} Add a new custom profile")
+    print(f"  {CYAN}--profile-remove <n>{RESET} Remove a profile")
     print(f"  {CYAN}--config{RESET}        Open configuration file")
     print(f"  {CYAN}--debug{RESET}         Enable debug mode")
     print(f"  {CYAN}--debug-config{RESET}  Print the loaded configuration (redacts keys)")
@@ -218,22 +255,163 @@ def print_help():
     print(f"\n{YELLOW}Examples:{RESET}")
     print(f"  ai \"How do I unzip a tar file?\"")
     print(f"  ai chat")
+    print(f"  ai --use")
+    print(f"  ai -p local-ollama \"What is Python?\"")
     print(f"  ai --model")
-    print(f"  ai -m gemini-2.5-pro")
-    print(f"  ai -i \"Let's talk about Python\"")
     print(f"  cat error.log | ai \"Explain this error briefly\"")
     return 0 # Return 0 for success
 
+def list_profiles(config):
+    """Displays a formatted list of all configured profiles and indicates which is currently active."""
+    profiles = config.get("profiles", {})
+    active = config.get("active_profile", "")
+    
+    print(f"\n{BLUE}💬 Configured Profiles:{RESET}")
+    for idx, p_name in enumerate(profiles.keys(), 1):
+        is_active = f" {GREEN}(active){RESET}" if p_name == active else ""
+        p_config = profiles[p_name]
+        prov = p_config.get("provider", "gemini")
+        model = p_config.get("model_name", "")
+        extra = f" ({p_config['base_url']})" if prov == "openai" and "base_url" in p_config else ""
+        print(f"  {CYAN}{idx}. {p_name}{RESET} [{YELLOW}{prov}{RESET}] -> {model}{extra}{is_active}")
+    print()
+    return 0
+
+def switch_profile(config, profile_name=None):
+    """Changes the active profile globally, either directly or via an interactive selection list."""
+    profiles = config.get("profiles", {})
+    
+    if not profile_name:
+        # Interactive Selection list
+        print(f"\n{BLUE}💬 Select a profile to set as default active profile:{RESET}")
+        profile_list = list(profiles.keys())
+        active = config.get("active_profile", "")
+        
+        for idx, p_name in enumerate(profile_list, 1):
+            is_active = f" {GREEN}(active){RESET}" if p_name == active else ""
+            p_config = profiles[p_name]
+            prov = p_config.get("provider", "gemini")
+            model = p_config.get("model_name", "")
+            print(f"  {CYAN}{idx}. {p_name}{RESET} [{YELLOW}{prov}{RESET}] -> {model}{is_active}")
+            
+        try:
+            choice = input(f"\nSelect a profile number to set as active (or press Enter to cancel): ").strip()
+            if not choice:
+                print("Cancelled.")
+                return 0
+            choice_idx = int(choice) - 1
+            if 0 <= choice_idx < len(profile_list):
+                profile_name = profile_list[choice_idx]
+            else:
+                print(f"{RED}[!] Invalid choice.{RESET}")
+                return 1
+        except ValueError:
+            print(f"{RED}[!] Invalid number entered.{RESET}")
+            return 1
+        except (KeyboardInterrupt, EOFError):
+            print("\nCancelled.")
+            return 0
+
+    if profile_name in profiles:
+        config["active_profile"] = profile_name
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=4)
+        print(f"{GREEN}[✓] Default active profile switched successfully to: {profile_name}{RESET}")
+        return 0
+    else:
+        print(f"{RED}[Error] Profile '{profile_name}' not found.{RESET}")
+        return 1
+
+def add_profile(config, profile_name):
+    """Adds a new profile to config.json interactively."""
+    profiles = config.get("profiles", {})
+    if profile_name in profiles:
+        print(f"{RED}[Error] Profile '{profile_name}' already exists.{RESET}")
+        return 1
+
+    print(f"\n{BLUE}🚀 Adding new profile: {profile_name}{RESET}")
+    print("Choose profile provider type:")
+    print("  1. Gemini")
+    print("  2. OpenAI (or OpenAI-compatible custom endpoint)")
+    
+    provider_type = ""
+    while provider_type not in ["1", "2"]:
+        try:
+            provider_type = input("Choice [1-2]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nCancelled.")
+            return 0
+
+    new_profile = {}
+    if provider_type == "1":
+        new_profile["provider"] = "gemini"
+        print(f"[{APP_NAME}] Enter your Gemini API Key. Get it from aistudio.google.com")
+        api_key = input("Gemini API Key: ").strip()
+        if not api_key:
+            print("Error: Key cannot be empty.")
+            return 1
+        new_profile["api_key"] = api_key
+        new_profile["model_name"] = "gemini-2.5-flash"
+        new_profile["system_instruction"] = DEFAULT_CONFIG["profiles"]["gemini-default"]["system_instruction"]
+        new_profile["generation_config"] = DEFAULT_CONFIG["profiles"]["gemini-default"]["generation_config"]
+    else:
+        new_profile["provider"] = "openai"
+        print(f"[{APP_NAME}] Enter OpenAI/Custom Base URL (Press Enter for default: https://api.openai.com/v1)")
+        base_url = input("Base URL: ").strip()
+        new_profile["base_url"] = base_url if base_url else "https://api.openai.com/v1"
+        
+        print(f"[{APP_NAME}] Enter your OpenAI/Custom API Key.")
+        api_key = input("API Key: ").strip()
+        if not api_key:
+            print("Error: Key cannot be empty.")
+            return 1
+        new_profile["api_key"] = api_key
+        
+        print(f"[{APP_NAME}] Enter Model Name (Press Enter for default: gpt-4o)")
+        model_name = input("Model Name: ").strip()
+        new_profile["model_name"] = model_name if model_name else "gpt-4o"
+        new_profile["system_instruction"] = DEFAULT_CONFIG["profiles"]["openai-default"]["system_instruction"]
+        new_profile["temperature"] = 0.7
+        new_profile["max_tokens"] = 1024
+
+    config["profiles"][profile_name] = new_profile
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=4)
+    print(f"{GREEN}[✓] Profile '{profile_name}' created successfully!{RESET}")
+    return 0
+
+def remove_profile(config, profile_name):
+    """Deletes a profile from config.json."""
+    profiles = config.get("profiles", {})
+    active = config.get("active_profile", "")
+    
+    if profile_name not in profiles:
+        print(f"{RED}[Error] Profile '{profile_name}' not found.{RESET}")
+        return 1
+        
+    if profile_name == active:
+        print(f"{RED}[Error] Cannot remove currently active profile '{profile_name}'. Please switch to another profile first.{RESET}")
+        return 1
+        
+    del config["profiles"][profile_name]
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=4)
+    print(f"{GREEN}[✓] Profile '{profile_name}' deleted successfully.{RESET}")
+    return 0
+
 def handle_model_option(config):
     """Fetches and displays available Gemini models interactively, or directly sets the model if specified."""
-    provider = config.get("provider", "gemini")
+    active_profile = config.get("active_profile", "")
+    profiles = config.get("profiles", {})
+    profile_config = profiles.get(active_profile, {})
+    
+    provider = profile_config.get("provider", "gemini")
     if provider != "gemini":
-        print(f"{YELLOW}[*] Model listing/switching is currently supported for the Gemini provider.{RESET}")
+        print(f"{YELLOW}[*] Model listing/switching is currently supported for profiles using the Gemini provider.{RESET}")
         return 0
 
-    gemini_config = config.get("gemini_config", {})
-    api_key = gemini_config.get("api_key")
-    current_model = gemini_config.get("model_name", "gemini-2.5-flash")
+    api_key = profile_config.get("api_key")
+    current_model = profile_config.get("model_name", "gemini-2.5-flash")
 
     # Check if a model argument is provided after the flag
     model_arg = ""
@@ -247,14 +425,14 @@ def handle_model_option(config):
 
     if model_arg:
         clean_model = model_arg.replace("models/", "")
-        config["gemini_config"]["model_name"] = clean_model
+        config["profiles"][active_profile]["model_name"] = clean_model
         with open(CONFIG_FILE, "w") as f:
             json.dump(config, f, indent=4)
-        print(f"{GREEN}[✓] Gemini model updated successfully to: {clean_model}{RESET}")
+        print(f"{GREEN}[✓] Model for profile '{active_profile}' updated successfully to: {clean_model}{RESET}")
         return 0
 
     if not api_key:
-        print(f"{RED}[Error] Gemini API key not found. Please set your key first using `ai --reinstall`.{RESET}")
+        print(f"{RED}[Error] Gemini API key not found for active profile '{active_profile}'. Please configure it first.{RESET}")
         return 1
 
     print(f"{BLUE}[*] Fetching available models from Gemini API...{RESET}")
@@ -299,10 +477,10 @@ def handle_model_option(config):
             choice_idx = int(choice) - 1
             if 0 <= choice_idx < len(generation_models):
                 selected_model = generation_models[choice_idx]["name"]
-                config["gemini_config"]["model_name"] = selected_model
+                config["profiles"][active_profile]["model_name"] = selected_model
                 with open(CONFIG_FILE, "w") as f:
                     json.dump(config, f, indent=4)
-                print(f"{GREEN}[✓] Gemini model successfully updated to: {selected_model}{RESET}")
+                print(f"{GREEN}[✓] Gemini model for profile '{active_profile}' successfully updated to: {selected_model}{RESET}")
             else:
                 print(f"{RED}[!] Invalid choice.{RESET}")
         except ValueError:
@@ -384,13 +562,11 @@ def render_markdown(text):
 
     return "\n".join(rendered_lines)
 
-def send_gemini_request(config, user_input, debug_mode, history=None):
-    gemini_config = config.get("gemini_config", {})
-    api_key = gemini_config.get("api_key")
-    model_name = gemini_config.get("model_name", "gemini-2.5-flash")
-    system_instr = gemini_config.get("system_instruction", "")
-    gen_config = gemini_config.get("generation_config", {})
-    proxy = config.get("proxy", "")
+def send_gemini_request(profile_config, user_input, debug_mode, proxy="", history=None):
+    api_key = profile_config.get("api_key")
+    model_name = profile_config.get("model_name", "gemini-2.5-flash")
+    system_instr = profile_config.get("system_instruction", "")
+    gen_config = profile_config.get("generation_config", {})
     api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
     
     payload_contents = history if history is not None else [{"parts": [{"text": user_input}]}]
@@ -436,15 +612,13 @@ def send_gemini_request(config, user_input, debug_mode, history=None):
         print(f"\n[Connection Error] {e}")
         return 1
 
-def send_openai_request(config, user_input, debug_mode, history=None):
-    openai_config = config.get("openai_config", {})
-    api_key = openai_config.get("api_key")
-    model_name = openai_config.get("model_name", "gpt-4o")
-    system_instr = openai_config.get("system_instruction", "")
-    temperature = openai_config.get("temperature", 0.7)
-    max_tokens = openai_config.get("max_tokens", 1024)
-    proxy = config.get("proxy", "")
-    base_url = openai_config.get("base_url", "https://api.openai.com/v1")
+def send_openai_request(profile_config, user_input, debug_mode, proxy="", history=None):
+    api_key = profile_config.get("api_key")
+    model_name = profile_config.get("model_name", "gpt-4o")
+    system_instr = profile_config.get("system_instruction", "")
+    temperature = profile_config.get("temperature", 0.7)
+    max_tokens = profile_config.get("max_tokens", 1024)
+    base_url = profile_config.get("base_url", "https://api.openai.com/v1")
     # Form the completions endpoint URL robustly
     if base_url.endswith("/"):
         base_url = base_url[:-1]
@@ -529,12 +703,12 @@ def cli_entry_point():
             return 1
         
         debug_config = copy.deepcopy(config)
-        if "gemini_config" in debug_config and "api_key" in debug_config["gemini_config"]:
-            key = debug_config["gemini_config"]["api_key"]
-            debug_config["gemini_config"]["api_key"] = f"***{key[-4:]}" if key else ""
-        if "openai_config" in debug_config and "api_key" in debug_config["openai_config"]:
-            key = debug_config["openai_config"]["api_key"]
-            debug_config["openai_config"]["api_key"] = f"***{key[-4:]}" if key else ""
+        if "profiles" in debug_config:
+            for p_name in debug_config["profiles"]:
+                p_cfg = debug_config["profiles"][p_name]
+                if "api_key" in p_cfg:
+                    key = p_cfg["api_key"]
+                    p_cfg["api_key"] = f"***{key[-4:]}" if key else ""
             
         print(json.dumps(debug_config, indent=4))
         return 0
@@ -548,6 +722,31 @@ def cli_entry_point():
     if "--config" in sys.argv:
         return open_editor()
 
+    # Profile management options
+    if "--profiles" in sys.argv:
+        return list_profiles(config)
+        
+    if "--use" in sys.argv:
+        idx = sys.argv.index("--use")
+        profile_name = sys.argv[idx + 1] if idx + 1 < len(sys.argv) else None
+        return switch_profile(config, profile_name)
+        
+    if "--profile-add" in sys.argv:
+        idx = sys.argv.index("--profile-add")
+        if idx + 1 < len(sys.argv):
+            return add_profile(config, sys.argv[idx + 1])
+        else:
+            print(f"{RED}[Error] Please provide a name for the new profile: ai --profile-add <name>{RESET}")
+            return 1
+
+    if "--profile-remove" in sys.argv:
+        idx = sys.argv.index("--profile-remove")
+        if idx + 1 < len(sys.argv):
+            return remove_profile(config, sys.argv[idx + 1])
+        else:
+            print(f"{RED}[Error] Please provide a profile name to remove: ai --profile-remove <name>{RESET}")
+            return 1
+
     if "--model" in sys.argv or "-m" in sys.argv:
         return handle_model_option(config)
 
@@ -555,32 +754,77 @@ def cli_entry_point():
     chat_mode = any(x in sys.argv for x in ["--chat", "-i", "chat"])
     
     chat_flags = ["--chat", "-i", "chat"]
+    profile_flags = ["--profile", "-p"]
     model_flags = ["--model", "-m"]
     
-    # Filter out configuration, help, reinstall, chat, and model flags/arguments
+    # Check if a custom profile is temporarily chosen
+    target_profile = config.get("active_profile", "")
+    temp_profile = None
+    for flag in profile_flags:
+        if flag in sys.argv:
+            idx = sys.argv.index(flag)
+            if idx + 1 < len(sys.argv) and not sys.argv[idx + 1].startswith("-"):
+                temp_profile = sys.argv[idx + 1].strip()
+                break
+            else:
+                # Interactive Run - no direct profile argument provided, prompt user to select a profile
+                profiles = config.get("profiles", {})
+                profile_list = list(profiles.keys())
+                print(f"\n{BLUE}💬 Select a profile to run this query:{RESET}")
+                for p_idx, p_name in enumerate(profile_list, 1):
+                    p_config = profiles[p_name]
+                    prov = p_config.get("provider", "gemini")
+                    print(f"  {CYAN}{p_idx}. {p_name}{RESET} [{YELLOW}{prov}{RESET}]")
+                try:
+                    choice = input(f"\nSelect a profile number: ").strip()
+                    if not choice:
+                        print("Cancelled.")
+                        return 0
+                    choice_idx = int(choice) - 1
+                    if 0 <= choice_idx < len(profile_list):
+                        temp_profile = profile_list[choice_idx]
+                    else:
+                        print(f"{RED}[!] Invalid choice.{RESET}")
+                        return 1
+                except (ValueError, IndexError):
+                    print(f"{RED}[!] Invalid choice.{RESET}")
+                    return 1
+                except (KeyboardInterrupt, EOFError):
+                    print("\nCancelled.")
+                    return 0
+
+    if temp_profile:
+        if temp_profile in config.get("profiles", {}):
+            target_profile = temp_profile
+        else:
+            print(f"{RED}[Error] Profile '{temp_profile}' not found in configuration.{RESET}")
+            return 1
+
+    # Filter out configuration, help, reinstall, chat, model, and profile flags/arguments from prompt text
     filtered_args = []
     skip = False
     for idx, arg in enumerate(sys.argv[1:]):
         if skip:
             skip = False
             continue
-        if arg in model_flags:
-            # If the next item is not another option, it's the model name, so skip it from prompt args
+        if arg in model_flags + profile_flags:
             if idx + 2 < len(sys.argv) and not sys.argv[idx + 2].startswith("-"):
                 skip = True
             continue
-        if arg in ["--debug", "--config", "--help", "-h", "--reinstall", "--debug-config"] + chat_flags:
+        if arg in ["--debug", "--config", "--help", "-h", "--reinstall", "--debug-config", "--profiles", "--use", "--profile-add", "--profile-remove"] + chat_flags:
             continue
         filtered_args.append(arg)
     args = filtered_args
 
     # Handle interactive chat session mode
     if chat_mode:
-        provider = config.get("provider", "gemini")
+        active_config = config["profiles"][target_profile]
+        provider = active_config.get("provider", "gemini")
+        proxy = config.get("proxy", "")
         if provider == "gemini":
-            model_name = config.get("gemini_config", {}).get("model_name", "gemini-2.5-flash")
+            model_name = active_config.get("model_name", "gemini-2.5-flash")
         else:
-            model_name = config.get("openai_config", {}).get("model_name", "gpt-4o")
+            model_name = active_config.get("model_name", "gpt-4o")
             
         # Read piped content if stdin is not a TTY (before we redirect it)
         piped_content = ""
@@ -593,7 +837,7 @@ def cli_entry_point():
                 pass
 
         print(f"\n{BLUE}💬 Termai Interactive Chat Session{RESET}")
-        print(f"Using Provider: {YELLOW}{provider.capitalize()}{RESET} | Model: {CYAN}{model_name}{RESET}")
+        print(f"Using Profile: {CYAN}{target_profile}{RESET} | Provider: {YELLOW}{provider.capitalize()}{RESET} | Model: {CYAN}{model_name}{RESET}")
         print(f"Type {YELLOW}exit{RESET} or {YELLOW}quit{RESET} (or Ctrl+D) to end the chat.\n")
         
         history = []
@@ -616,10 +860,10 @@ def cli_entry_point():
             print(f"You {CYAN}>>>{RESET} {display_prompt}")
             if provider == "gemini":
                 history.append({"role": "user", "parts": [{"text": initial_prompt}]})
-                status = send_gemini_request(config, "", debug_mode, history=history)
+                status = send_gemini_request(active_config, "", debug_mode, proxy=proxy, history=history)
             else:
                 history.append({"role": "user", "content": initial_prompt})
-                status = send_openai_request(config, "", debug_mode, history=history)
+                status = send_openai_request(active_config, "", debug_mode, proxy=proxy, history=history)
             
             if status != 0:
                 print(f"{RED}[Error] Failed to get response. Continuing session...{RESET}")
@@ -635,10 +879,10 @@ def cli_entry_point():
                 
                 if provider == "gemini":
                     history.append({"role": "user", "parts": [{"text": user_input}]})
-                    status = send_gemini_request(config, "", debug_mode, history=history)
+                    status = send_gemini_request(active_config, "", debug_mode, proxy=proxy, history=history)
                 else:
                     history.append({"role": "user", "content": user_input})
-                    status = send_openai_request(config, "", debug_mode, history=history)
+                    status = send_openai_request(active_config, "", debug_mode, proxy=proxy, history=history)
                     
                 if status != 0:
                     print(f"{RED}[Error] Failed to get response. Continuing session...{RESET}")
@@ -656,13 +900,16 @@ def cli_entry_point():
     else:
         return print_help()
 
-    provider = config.get("provider", "gemini")
+    active_config = config["profiles"][target_profile]
+    provider = active_config.get("provider", "gemini")
+    proxy = config.get("proxy", "")
+    
     if provider == "gemini":
-        return send_gemini_request(config, user_input, debug_mode)
+        return send_gemini_request(active_config, user_input, debug_mode, proxy=proxy)
     elif provider == "openai":
-        return send_openai_request(config, user_input, debug_mode)
+        return send_openai_request(active_config, user_input, debug_mode, proxy=proxy)
     else:
-        print(f"[Error] Invalid provider '{provider}' in config.json. Use 'gemini' or 'openai'.")
+        print(f"[Error] Invalid provider '{provider}' in profile '{target_profile}'. Use 'gemini' or 'openai'.")
         return 1
 
 def main():
