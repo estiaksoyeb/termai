@@ -367,13 +367,29 @@ def cli_entry_point():
         else:
             model_name = config.get("openai_config", {}).get("model_name", "gpt-4o")
             
+        # Read piped content if stdin is not a TTY (before we redirect it)
+        piped_content = ""
+        if not sys.stdin.isatty():
+            piped_content = sys.stdin.read().strip()
+            # Redirect stdin back to the interactive terminal (/dev/tty) so input() works
+            try:
+                sys.stdin = open('/dev/tty')
+            except OSError:
+                pass
+
         print(f"\n{BLUE}💬 Termai Interactive Chat Session{RESET}")
         print(f"Using Provider: {YELLOW}{provider.capitalize()}{RESET} | Model: {CYAN}{model_name}{RESET}")
         print(f"Type {YELLOW}exit{RESET} or {YELLOW}quit{RESET} (or Ctrl+D) to end the chat.\n")
         
         history = []
+        initial_prompt = piped_content
         if args:
-            initial_prompt = " ".join(args)
+            if initial_prompt:
+                initial_prompt += "\n" + " ".join(args)
+            else:
+                initial_prompt = " ".join(args)
+
+        if initial_prompt:
             print(f"You {CYAN}>>>{RESET} {initial_prompt}")
             if provider == "gemini":
                 history.append({"role": "user", "parts": [{"text": initial_prompt}]})
