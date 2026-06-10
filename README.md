@@ -63,11 +63,59 @@ cat install.sh | ai "What does this script do?"
 ```
 
 Generate code and save it:
-```bash
-ai "Write a Python hello world script" > hello.py
-```
+ ```bash
+ ai "Write a Python hello world script" > hello.py
+ ```
 
-## ⚙️ Configuration
+3. Saving Outputs (With Terminal Output)
+You can save the response to a file while still viewing the output in your terminal:
+ ```bash
+ # Save a single-query response
+ ai "Explain machine learning in 1 sentence" -o ml_concept.txt
+
+ # Automatically save a chat session transcript when you exit
+ ai chat -o chat_session.md
+ ```
+
+4. Interactive Chat
+Start an interactive, multi-turn chat session with memory:
+ ```bash
+ ai chat
+ ```
+ * **Rich Terminal Aesthetics**: Interactive chat features a beautiful slate-blue header card and full-width royal-purple highlight blocks for user messages (properly aligned even when emojis are used).
+ * **Conversation Snapshots**: Save your chat transcript in clean Markdown format at any point during the conversation by typing:
+   ```text
+   save snapshot.md
+   ```
+
+ ## 👥 Profile Management
+ Termai supports multiple AI provider configurations. You can manage them using the `profile` subcommand:
+ 
+ * **List profiles**:
+   ```bash
+   ai profile
+   ```
+   *(Alias: `ai profile list`)*
+ * **Switch default active profile**:
+   ```bash
+   ai profile use [profile_name]
+   ```
+   *(Launches an interactive selection list if no profile name is provided)*
+ * **Add a new profile**:
+   ```bash
+   ai profile add <name>
+   ```
+ * **Remove a profile**:
+   ```bash
+   ai profile remove <name>
+   ```
+   *(Alias: `ai profile rm`)*
+ * **Run query with temporary profile**:
+   ```bash
+   ai -p <profile_name> "your query"
+   ```
+
+ ## ⚙️ Configuration
 Termai comes with a built-in configuration editor. You can change the AI provider, model, and personality.
 Run:
 ```bash
@@ -114,6 +162,20 @@ The configuration file looks like this:
     *   `system_instruction`: A different persona for ChatGPT.
     *   `temperature`: Controls randomness.
     *   `max_tokens`: The maximum number of tokens to generate.
+
+## ⌨️ Shell Auto-Completion
+Termai includes built-in dynamic shell autocompletion for subcommands, options, profile names, and models.
+
+The installer automatically configures autocomplete for your shell (`.bashrc` / `.zshrc`). You can also manually source the autocompletion loaders:
+
+* **Bash**:
+  ```bash
+  source <(ai completion bash)
+  ```
+* **Zsh**:
+  ```zsh
+  source <(ai completion zsh)
+  ```
 
 ## ❓ Help & Troubleshooting
 **Command List:**
