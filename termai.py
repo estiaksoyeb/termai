@@ -837,6 +837,7 @@ complete -F _ai_completion ai""")
             return 0
         elif shell == "zsh":
             print(f"""# Zsh completion for termai (ai)
+(( $+functions[compdef] )) || {{ autoload -Uz compinit && compinit; }}
 _ai_completion() {{
     local -a replies
     local IFS=$'\\n'
