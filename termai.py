@@ -231,38 +231,41 @@ def open_editor():
 
 def print_help():
     """Prints the help menu with available commands."""
-    print(f"\n{GREEN}Termai - A CLI AI Assistant{RESET}")
-    print(f"A lightweight CLI tool for AI integration in your terminal.\n")
-    
-    print(f"{YELLOW}Usage:{RESET}")
-    print(f"  ai [OPTIONS] \"YOUR QUERY\"")
-    print(f"  cat file.txt | ai [OPTIONS] \"OPTIONAL PROMPT\"")
-    
-    print(f"\n{YELLOW}Options:{RESET}")
-    print(f"  {CYAN}-i, --chat, chat{RESET} Start an interactive chat session")
-    print(f"  {CYAN}-p, --profile [name]{RESET} Run query using or switching temporarily to a profile")
-    print(f"  {CYAN}-m, --model [name]{RESET} List available Gemini models or set a specific one")
-    print(f"  {CYAN}profile [action]{RESET}  Profile management: list, use, add, remove (or rm)")
-    print(f"  {CYAN}completion [shell]{RESET} Generate shell auto-completion script (bash or zsh)")
-    print(f"  {CYAN}--config{RESET}        Open configuration file")
-    print(f"  {CYAN}--debug{RESET}         Enable debug mode")
-    print(f"  {CYAN}--debug-config{RESET}  Print the loaded configuration (redacts keys)")
-    print(f"  {CYAN}--help, -h{RESET}      Show this help message")
-    print(f"  {CYAN}--reinstall{RESET}    Re-run the first-time setup")
-    
-    print(f"\n{YELLOW}Legacy Profile Flags (deprecated):{RESET}")
-    print(f"  {CYAN}--profiles{RESET}      List all configured profiles")
-    print(f"  {CYAN}--use [name]{RESET}     Set active profile default")
-    print(f"  {CYAN}--profile-add <name>{RESET} Add a new custom profile")
-    print(f"  {CYAN}--profile-remove <n>{RESET} Remove a profile")
-    
-    print(f"\n{YELLOW}Examples:{RESET}")
-    print(f"  ai \"How do I unzip a tar file?\"")
-    print(f"  ai chat")
-    print(f"  ai profile use")
-    print(f"  ai -p local-ollama \"What is Python?\"")
-    print(f"  ai --model")
-    print(f"  cat error.log | ai \"Explain this error briefly\"")
+    help_markdown = """
+# Termai - A CLI AI Assistant
+A lightweight CLI tool for AI integration in your terminal.
+
+## Usage
+* `ai [OPTIONS] "YOUR QUERY"`
+* `cat file.txt | ai [OPTIONS] "OPTIONAL PROMPT"`
+
+## Options
+* `-i`, `--chat`, `chat` : Start an interactive chat session
+* `-p`, `--profile [name]` : Run query using or switching temporarily to a profile
+* `-m`, `--model [name]` : List available Gemini models or set a specific one
+* `profile [action]` : Profile management: `list`, `use`, `add`, `remove` (or `rm`)
+* `completion [shell]` : Generate shell auto-completion script (`bash` or `zsh`)
+* `--config` : Open configuration file
+* `--debug` : Enable debug mode
+* `--debug-config` : Print the loaded configuration (redacts keys)
+* `--help`, `-h` : Show this help message
+* `--reinstall` : Re-run the first-time setup
+
+## Legacy Profile Flags (deprecated)
+* `--profiles` : List all configured profiles
+* `--use [name]` : Set active profile default
+* `--profile-add <name>` : Add a new custom profile
+* `--profile-remove <n>` : Remove a profile
+
+## Examples
+* `ai "How do I unzip a tar file?"`
+* `ai chat`
+* `ai profile use`
+* `ai -p local-ollama "What is Python?"`
+* `ai --model`
+* `cat error.log | ai "Explain this error briefly"`
+"""
+    print(render_markdown(help_markdown.strip()))
     return 0 # Return 0 for success
 
 def handle_completion(config):
