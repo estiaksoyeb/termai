@@ -340,9 +340,11 @@ def print_user_message(prompt_text, message_text):
     except Exception:
         cols = 80
 
-    lines = textwrap.wrap(message_text, width=cols, initial_indent=prompt_text, subsequent_indent=" " * len(prompt_text))
+    width = cols - 1 if cols > 1 else 1
+
+    lines = textwrap.wrap(message_text, width=width, initial_indent=prompt_text, subsequent_indent=" " * len(prompt_text))
     for line in lines:
-        padded = line.ljust(cols)
+        padded = line.ljust(width)
         print(f"{BG_USER}{padded}{RESET}")
 
 def print_header_block(target_profile, provider, model_name):
@@ -361,21 +363,23 @@ def print_header_block(target_profile, provider, model_name):
     except Exception:
         cols = 80
 
+    width = cols - 1 if cols > 1 else 1
+
     title = "💬 Termai Interactive Chat Session"
     details = f"Using Profile: {target_profile} | Provider: {provider.capitalize()} | Model: {model_name}"
     info = "Type exit or quit (or Ctrl+D) to end the chat."
 
     lines = []
     for text in [title, details, info]:
-        wrapped = textwrap.wrap(text, width=cols - 4)
+        wrapped = textwrap.wrap(text, width=width - 4)
         for w in wrapped:
             lines.append(f"  {w}")
 
-    pad = " " * cols
+    pad = " " * width
     print()
     print(f"{BG_HEADER}{pad}{RESET}")
     for line in lines:
-        padded = line.ljust(cols)
+        padded = line.ljust(width)
         print(f"{BG_HEADER}{padded}{RESET}")
     print(f"{BG_HEADER}{pad}{RESET}")
 
