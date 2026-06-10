@@ -23,6 +23,7 @@ if sys.stdout.isatty():
     RED = "\033[91m"
     BLUE = "\033[94m"
     RESET = "\033[0m"
+    BG_USER = "\033[48;5;99m\033[38;5;255m"
 else:
     GREEN = ""
     CYAN = ""
@@ -30,6 +31,7 @@ else:
     RED = ""
     BLUE = ""
     RESET = ""
+    BG_USER = ""
 
 # --- Default Settings ---
 # If the config file is deleted/missing, these values are used to recreate it.
@@ -321,6 +323,25 @@ def handle_completion(config):
     for m in matches:
         print(m)
     return 0
+
+def print_user_message(prompt_text, message_text):
+    """Prints a styled user message block with full-width background color and clean word wrapping."""
+    if not BG_USER:
+        print(f"{prompt_text}{message_text}")
+        return
+
+    import shutil
+    import textwrap
+
+    try:
+        cols = shutil.get_terminal_size().columns
+    except Exception:
+        cols = 80
+
+    lines = textwrap.wrap(message_text, width=cols, initial_indent=prompt_text, subsequent_indent=" " * len(prompt_text))
+    for line in lines:
+        padded = line.ljust(cols)
+        print(f"{BG_USER}{padded}{RESET}")
 
 def list_profiles(config):
     """Displays a formatted list of all configured profiles and indicates which is currently active."""
@@ -994,7 +1015,7 @@ compdef _ai_completion ai""")
             display_prompt = initial_prompt
 
         if initial_prompt:
-            print(f"You {CYAN}>>>{RESET} {display_prompt}")
+            print_user_message(" You >>> ", display_prompt)
             if provider == "gemini":
                 history.append({"role": "user", "parts": [{"text": initial_prompt}]})
                 status = send_gemini_request(active_config, "", debug_mode, proxy=proxy, history=history)
@@ -1007,9 +1028,27 @@ compdef _ai_completion ai""")
                 
         while True:
             try:
-                user_input = input(f"\nYou {CYAN}>>>{RESET} ").strip()
+                prompt = f"\n You >>> "
+                user_input = input(prompt)
+                user_input = user_input.strip()
                 if not user_input:
                     continue
+                
+                # Rewrite typed text with beautiful full-width purple background block
+                if BG_USER:
+                    import shutil
+                    import math
+                    try:
+                        cols = shutil.get_terminal_size().columns
+                    except Exception:
+                        cols = 80
+                    total_len = len(prompt) + len(user_input)
+                    n_lines = math.ceil(total_len / cols) if cols else 1
+                    sys.stdout.write(f"\033[{n_lines}A\r\033[J")
+                    sys.stdout.flush()
+                
+                print_user_message(" You >>> ", user_input)
+                
                 if user_input.lower() in ["exit", "quit"]:
                     print(f"\n{YELLOW}Goodbye!{RESET}")
                     break
