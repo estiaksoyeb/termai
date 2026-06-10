@@ -87,7 +87,22 @@ else
     exit 1
 fi
 
-# 7. Safe Cleanup (Interactive)
+# 7. Setup Auto-completion
+echo -e "${YELLOW}[*] Setting up shell auto-completion...${RESET}"
+if [ -f "$HOME/.bashrc" ]; then
+    if ! grep -q "_ai_completion" "$HOME/.bashrc"; then
+        echo "    Adding completion to ~/.bashrc..."
+        echo -e "\n# Termai auto-completion\nsource <(\"$BIN_DIR/ai\" completion bash)" >> "$HOME/.bashrc"
+    fi
+fi
+if [ -f "$HOME/.zshrc" ]; then
+    if ! grep -q "_ai_completion" "$HOME/.zshrc"; then
+        echo "    Adding completion to ~/.zshrc..."
+        echo -e "\n# Termai auto-completion\nsource <(\"$BIN_DIR/ai\" completion zsh)" >> "$HOME/.zshrc"
+    fi
+fi
+
+# 8. Safe Cleanup (Interactive)
 if [ -f "$SOURCE_FILE" ]; then
     echo ""
     echo -e "${BLUE}[?] Do you want to delete this installation folder to save space?${RESET}"

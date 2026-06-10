@@ -156,7 +156,7 @@ def load_config():
         
     # 3. First Run Setup
     new_config = copy.deepcopy(DEFAULT_CONFIG)
-    if sys.stdin.isatty():
+    if sys.stdin.isatty() and "--complete" not in sys.argv:
         print(f"[{APP_NAME}] First run! Choose your primary AI provider.")
         provider = ""
         while provider not in ["1", "2"]:
@@ -243,6 +243,7 @@ def print_help():
     print(f"  {CYAN}-p, --profile [name]{RESET} Run query using or switching temporarily to a profile")
     print(f"  {CYAN}-m, --model [name]{RESET} List available Gemini models or set a specific one")
     print(f"  {CYAN}profile [action]{RESET}  Profile management: list, use, add, remove (or rm)")
+    print(f"  {CYAN}completion [shell]{RESET} Generate shell auto-completion script (bash or zsh)")
     print(f"  {CYAN}--config{RESET}        Open configuration file")
     print(f"  {CYAN}--debug{RESET}         Enable debug mode")
     print(f"  {CYAN}--debug-config{RESET}  Print the loaded configuration (redacts keys)")
@@ -263,6 +264,60 @@ def print_help():
     print(f"  ai --model")
     print(f"  cat error.log | ai \"Explain this error briefly\"")
     return 0 # Return 0 for success
+
+def handle_completion(config):
+    """Generates autocomplete suggestions for bash/zsh tab completion."""
+    try:
+        complete_idx = sys.argv.index("--complete")
+        cword_idx = sys.argv.index("--cword")
+        # Extract command line words
+        words = sys.argv[complete_idx + 1:cword_idx]
+        cword = int(sys.argv[cword_idx + 1])
+    except (ValueError, IndexError):
+        return 0
+
+    if cword < 0 or cword >= len(words):
+        return 0
+
+    cur = words[cword]
+    suggestions = []
+
+    # Case 1: First argument completion (ai [tab] or ai ch[tab])
+    if cword == 1:
+        suggestions = [
+            "chat", "profile", "completion", "help",
+            "-i", "--chat", "-p", "--profile", "-m", "--model",
+            "--profiles", "--use", "--profile-add", "--profile-remove",
+            "--config", "--debug", "--debug-config", "--help", "-h", "--reinstall"
+        ]
+
+    # Case 2: Subcommands/Options under 'profile'
+    elif cword == 2 and words[1] == "profile":
+        suggestions = ["list", "use", "set", "add", "remove", "rm", "help", "--help", "-h"]
+
+    # Case 3: Profile names for 'profile use/set/remove/rm'
+    elif cword == 3 and words[1] == "profile" and words[2] in ["use", "set", "remove", "rm"]:
+        if config:
+            suggestions = list(config.get("profiles", {}).keys())
+
+    # Case 4: Profile names for legacy/temporary profile flags
+    elif cword >= 2 and words[cword - 1] in ["--use", "--profile-remove", "--profile", "-p"]:
+        if config:
+            suggestions = list(config.get("profiles", {}).keys())
+
+    # Case 5: Model names for --model/-m
+    elif cword >= 2 and words[cword - 1] in ["--model", "-m"]:
+        suggestions = ["gemini-2.5-flash", "gemini-2.5-pro", "gpt-4o", "gpt-4o-mini"]
+
+    # Case 6: Shell options for 'completion'
+    elif cword == 2 and words[1] == "completion":
+        suggestions = ["bash", "zsh"]
+
+    # Filter and print matching suggestions
+    matches = [s for s in suggestions if s.startswith(cur)]
+    for m in matches:
+        print(m)
+    return 0
 
 def list_profiles(config):
     """Displays a formatted list of all configured profiles and indicates which is currently active."""
@@ -695,6 +750,9 @@ def cli_entry_point():
     
     config = load_config()
     
+    if "--complete" in sys.argv:
+        return handle_completion(config)
+    
     if "--reinstall" in sys.argv:
         print(f"[{APP_NAME}] Reinstall complete.")
         return 0
@@ -756,6 +814,39 @@ def cli_entry_point():
         else:
             print(f"{RED}[Error] Unknown profile subcommand '{subcommand}'.")
             print(f"Run 'ai profile --help' to see available commands.{RESET}")
+            return 1
+
+    # Handle 'completion' subcommand
+    if len(sys.argv) > 1 and sys.argv[1] == "completion" and sys.stdin.isatty():
+        shell = sys.argv[2] if len(sys.argv) > 2 else None
+        if not shell:
+            print(f"{RED}[Error] Please specify a shell: ai completion [bash|zsh]{RESET}")
+            return 1
+        
+        if shell == "bash":
+            print(f"""# Bash completion for termai (ai)
+_ai_completion() {{
+    local cur
+    COMPREPLY=()
+    cur="${{COMP_WORDS[COMP_CWORD]}}"
+    local IFS=$'\\n'
+    COMPREPLY=( $(ai --complete "${{COMP_WORDS[@]}}" --cword "$COMP_CWORD") )
+    return 0
+}}
+complete -F _ai_completion ai""")
+            return 0
+        elif shell == "zsh":
+            print(f"""# Zsh completion for termai (ai)
+_ai_completion() {{
+    local -a replies
+    local IFS=$'\\n'
+    replies=($(ai --complete "${{words[@]}}" --cword $((CURRENT-1))))
+    compadd -a replies
+}}
+compdef _ai_completion ai""")
+            return 0
+        else:
+            print(f"{RED}[Error] Unsupported shell '{shell}'. Supported: bash, zsh.{RESET}")
             return 1
 
     if "--help" in sys.argv or "-h" in sys.argv:
