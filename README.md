@@ -32,7 +32,7 @@ bash install.sh
 ```
 
 **What the installer does:**
- * **Dependency Check:** Verifies if Python 3 is installed and automatically installs the required `requests` library.
+ * **Dependency Check:** Verifies if Python 3 is installed and automatically installs the required libraries (`requests`, `rich`).
  * **Installs Core Logic:** Moves the script safely to a hidden directory (`~/.programs/termai`).
  * **Creates Binary Alias:** Generates the global `ai` execution alias in your binary directory (`$PREFIX/bin` on Termux, or `$HOME/.local/bin` on standard Linux).
  * **Optional Cleanup:** For manual installations, it offers to safely delete the cloned repository folder afterwards to save space.

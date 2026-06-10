@@ -34,7 +34,7 @@ else
 fi
 
 # 1. Install Dependencies
-echo -e "${YELLOW}[*] Installing dependencies (python, requests)...${RESET}"
+echo -e "${YELLOW}[*] Installing dependencies (python, requests, rich)...${RESET}"
 
 # Check if requests is installed before trying to install it
 if ! $PYTHON_CMD -c "import requests" &> /dev/null; then
@@ -42,6 +42,14 @@ if ! $PYTHON_CMD -c "import requests" &> /dev/null; then
     $PYTHON_CMD -m pip install requests &> /dev/null || $PYTHON_CMD -m pip install requests --break-system-packages &> /dev/null
 else
     echo "    'requests' is already installed."
+fi
+
+# Check if rich is installed before trying to install it
+if ! $PYTHON_CMD -c "import rich" &> /dev/null; then
+    echo "    'rich' not found. Installing..."
+    $PYTHON_CMD -m pip install rich &> /dev/null || $PYTHON_CMD -m pip install rich --break-system-packages &> /dev/null
+else
+    echo "    'rich' is already installed."
 fi
 
 # 2. Create Hidden Program Directory
