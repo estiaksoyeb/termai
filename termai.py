@@ -326,6 +326,24 @@ def handle_completion(config):
         print(m)
     return 0
 
+def visual_len(s):
+    """Calculates the visual column width of a string in the terminal, accounting for double-width wide characters/emojis."""
+    length = 0
+    for char in s:
+        if ord(char) > 0x2000:
+            length += 2
+        else:
+            length += 1
+    return length
+
+def visual_ljust(s, width):
+    """Pads a string with spaces to a visual width, rather than character count width."""
+    v_len = visual_len(s)
+    needed = width - v_len
+    if needed > 0:
+        return s + (" " * needed)
+    return s
+
 def print_user_message(prompt_text, message_text):
     """Prints a styled user message block with full-width background color and clean word wrapping."""
     if not BG_USER:
@@ -344,7 +362,7 @@ def print_user_message(prompt_text, message_text):
 
     lines = textwrap.wrap(message_text, width=width, initial_indent=prompt_text, subsequent_indent=" " * len(prompt_text))
     for line in lines:
-        padded = line.ljust(width)
+        padded = visual_ljust(line, width)
         print(f"{BG_USER}{padded}{RESET}")
 
 def print_header_block(target_profile, provider, model_name):
@@ -379,7 +397,7 @@ def print_header_block(target_profile, provider, model_name):
     print()
     print(f"{BG_HEADER}{pad}{RESET}")
     for line in lines:
-        padded = line.ljust(width)
+        padded = visual_ljust(line, width)
         print(f"{BG_HEADER}{padded}{RESET}")
     print(f"{BG_HEADER}{pad}{RESET}")
 
