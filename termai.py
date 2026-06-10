@@ -242,20 +242,23 @@ def print_help():
     print(f"  {CYAN}-i, --chat, chat{RESET} Start an interactive chat session")
     print(f"  {CYAN}-p, --profile [name]{RESET} Run query using or switching temporarily to a profile")
     print(f"  {CYAN}-m, --model [name]{RESET} List available Gemini models or set a specific one")
-    print(f"  {CYAN}--profiles{RESET}      List all configured profiles")
-    print(f"  {CYAN}--use [name]{RESET}     Set a profile as the active default (interactive if no name)")
-    print(f"  {CYAN}--profile-add <name>{RESET} Add a new custom profile")
-    print(f"  {CYAN}--profile-remove <n>{RESET} Remove a profile")
+    print(f"  {CYAN}profile [action]{RESET}  Profile management: list, use, add, remove (or rm)")
     print(f"  {CYAN}--config{RESET}        Open configuration file")
     print(f"  {CYAN}--debug{RESET}         Enable debug mode")
     print(f"  {CYAN}--debug-config{RESET}  Print the loaded configuration (redacts keys)")
     print(f"  {CYAN}--help, -h{RESET}      Show this help message")
     print(f"  {CYAN}--reinstall{RESET}    Re-run the first-time setup")
     
+    print(f"\n{YELLOW}Legacy Profile Flags (deprecated):{RESET}")
+    print(f"  {CYAN}--profiles{RESET}      List all configured profiles")
+    print(f"  {CYAN}--use [name]{RESET}     Set active profile default")
+    print(f"  {CYAN}--profile-add <name>{RESET} Add a new custom profile")
+    print(f"  {CYAN}--profile-remove <n>{RESET} Remove a profile")
+    
     print(f"\n{YELLOW}Examples:{RESET}")
     print(f"  ai \"How do I unzip a tar file?\"")
     print(f"  ai chat")
-    print(f"  ai --use")
+    print(f"  ai profile use")
     print(f"  ai -p local-ollama \"What is Python?\"")
     print(f"  ai --model")
     print(f"  cat error.log | ai \"Explain this error briefly\"")
@@ -716,13 +719,52 @@ def cli_entry_point():
     if config is None and not sys.stdin.isatty():
         return 1
     
+    # Handle 'profile' subcommand
+    if len(sys.argv) > 1 and sys.argv[1] == "profile" and sys.stdin.isatty():
+        subcommand = sys.argv[2] if len(sys.argv) > 2 else "list"
+        
+        if subcommand in ["--help", "-h", "help"]:
+            print(f"\n{GREEN}Termai Profile Management{RESET}")
+            print(f"Manage different AI configuration profiles.\n")
+            print(f"{YELLOW}Usage:{RESET}")
+            print(f"  ai profile list                List all configured profiles (alias: ai profile)")
+            print(f"  ai profile use [name]          Set a profile as the active default (interactive if no name)")
+            print(f"  ai profile add <name>          Add a new custom profile")
+            print(f"  ai profile remove <name>       Remove a profile (alias: rm)")
+            return 0
+            
+        elif subcommand == "list":
+            return list_profiles(config)
+            
+        elif subcommand in ["use", "set"]:
+            profile_name = sys.argv[3] if len(sys.argv) > 3 else None
+            return switch_profile(config, profile_name)
+            
+        elif subcommand == "add":
+            if len(sys.argv) > 3:
+                return add_profile(config, sys.argv[3])
+            else:
+                print(f"{RED}[Error] Please provide a name for the new profile: ai profile add <name>{RESET}")
+                return 1
+                
+        elif subcommand in ["remove", "rm"]:
+            if len(sys.argv) > 3:
+                return remove_profile(config, sys.argv[3])
+            else:
+                print(f"{RED}[Error] Please provide a profile name to remove: ai profile remove <name>{RESET}")
+                return 1
+        else:
+            print(f"{RED}[Error] Unknown profile subcommand '{subcommand}'.")
+            print(f"Run 'ai profile --help' to see available commands.{RESET}")
+            return 1
+
     if "--help" in sys.argv or "-h" in sys.argv:
         return print_help()
 
     if "--config" in sys.argv:
         return open_editor()
 
-    # Profile management options
+    # Legacy Profile management options
     if "--profiles" in sys.argv:
         return list_profiles(config)
         
