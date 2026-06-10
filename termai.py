@@ -24,6 +24,7 @@ if sys.stdout.isatty():
     BLUE = "\033[94m"
     RESET = "\033[0m"
     BG_USER = "\033[48;5;99m\033[38;5;255m"
+    BG_HEADER = "\033[48;5;24m\033[38;5;255m"
 else:
     GREEN = ""
     CYAN = ""
@@ -32,6 +33,7 @@ else:
     BLUE = ""
     RESET = ""
     BG_USER = ""
+    BG_HEADER = ""
 
 # --- Default Settings ---
 # If the config file is deleted/missing, these values are used to recreate it.
@@ -342,6 +344,40 @@ def print_user_message(prompt_text, message_text):
     for line in lines:
         padded = line.ljust(cols)
         print(f"{BG_USER}{padded}{RESET}")
+
+def print_header_block(target_profile, provider, model_name):
+    """Prints the chat session header block with full-width background color."""
+    if not BG_HEADER:
+        print(f"\n💬 Termai Interactive Chat Session")
+        print(f"Using Profile: {target_profile} | Provider: {provider.capitalize()} | Model: {model_name}")
+        print(f"Type exit or quit (or Ctrl+D) to end the chat.\n")
+        return
+
+    import shutil
+    import textwrap
+
+    try:
+        cols = shutil.get_terminal_size().columns
+    except Exception:
+        cols = 80
+
+    title = "💬 Termai Interactive Chat Session"
+    details = f"Using Profile: {target_profile} | Provider: {provider.capitalize()} | Model: {model_name}"
+    info = "Type exit or quit (or Ctrl+D) to end the chat."
+
+    lines = []
+    for text in [title, details, info]:
+        wrapped = textwrap.wrap(text, width=cols - 4)
+        for w in wrapped:
+            lines.append(f"  {w}")
+
+    pad = " " * cols
+    print()
+    print(f"{BG_HEADER}{pad}{RESET}")
+    for line in lines:
+        padded = line.ljust(cols)
+        print(f"{BG_HEADER}{padded}{RESET}")
+    print(f"{BG_HEADER}{pad}{RESET}")
 
 def list_profiles(config):
     """Displays a formatted list of all configured profiles and indicates which is currently active."""
@@ -994,9 +1030,7 @@ compdef _ai_completion ai""")
             except OSError:
                 pass
 
-        print(f"\n{BLUE}💬 Termai Interactive Chat Session{RESET}")
-        print(f"Using Profile: {CYAN}{target_profile}{RESET} | Provider: {YELLOW}{provider.capitalize()}{RESET} | Model: {CYAN}{model_name}{RESET}")
-        print(f"Type {YELLOW}exit{RESET} or {YELLOW}quit{RESET} (or Ctrl+D) to end the chat.\n")
+        print_header_block(target_profile, provider, model_name)
         
         history = []
         initial_prompt = ""
