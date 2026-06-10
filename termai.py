@@ -249,6 +249,7 @@ A lightweight CLI tool for AI integration in your terminal.
 * `-m`, `--model [name]` : List available Gemini models or set a specific one
 * `profile [action]` : Profile management: `list`, `use`, `add`, `remove` (or `rm`)
 * `completion [shell]` : Generate shell auto-completion script (`bash` or `zsh`)
+* `-o`, `--save <file>` : Save the response or chat session to a file
 * `--config` : Open configuration file
 * `--debug` : Enable debug mode
 * `--debug-config` : Print the loaded configuration (redacts keys)
@@ -264,6 +265,7 @@ A lightweight CLI tool for AI integration in your terminal.
 ## Examples
 * `ai "How do I unzip a tar file?"`
 * `ai chat`
+* `ai chat -o session.md`
 * `ai profile use`
 * `ai -p local-ollama "What is Python?"`
 * `ai --model`
@@ -343,6 +345,46 @@ def visual_ljust(s, width):
     if needed > 0:
         return s + (" " * needed)
     return s
+
+def save_chat_history(history, filename, provider, target_profile, model_name):
+    """Saves the chat history to a file in a clean Markdown format."""
+    from datetime import datetime
+    try:
+        filepath = Path(filename).resolve()
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(filepath, "w") as f:
+            f.write(f"# Termai Chat Session\n")
+            f.write(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Profile: {target_profile} | Provider: {provider.capitalize()} | Model: {model_name}\n\n")
+            f.write(f"---\n\n")
+            
+            for msg in history:
+                if provider == "gemini":
+                    role = "You" if msg.get("role") == "user" else "AI"
+                    text = msg.get("parts", [{}])[0].get("text", "")
+                else: # openai
+                    role = "You" if msg.get("role") == "user" else "AI"
+                    text = msg.get("content", "")
+                
+                f.write(f"### {role}\n{text}\n\n")
+                
+        print(f"{GREEN}[✓] Chat history saved successfully to: {filepath}{RESET}")
+        return True
+    except Exception as e:
+        print(f"{RED}[Error] Failed to save chat history: {e}{RESET}")
+        return False
+
+def save_single_response(text, filename):
+    """Saves a single AI response to a file."""
+    try:
+        filepath = Path(filename).resolve()
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        with open(filepath, "w") as f:
+            f.write(text.strip() + "\n")
+        print(f"\n{GREEN}[✓] Response saved to: {filepath}{RESET}")
+    except Exception as e:
+        print(f"\n{RED}[Error] Failed to save response: {e}{RESET}")
 
 def print_user_message(prompt_text, message_text):
     """Prints a styled user message block with full-width background color and clean word wrapping."""
@@ -702,7 +744,7 @@ def render_markdown(text):
 
     return "\n".join(rendered_lines)
 
-def send_gemini_request(profile_config, user_input, debug_mode, proxy="", history=None):
+def send_gemini_request(profile_config, user_input, debug_mode, proxy="", history=None, output_file=None):
     api_key = profile_config.get("api_key")
     model_name = profile_config.get("model_name", "gemini-2.5-flash")
     system_instr = profile_config.get("system_instruction", "")
@@ -741,6 +783,8 @@ def send_gemini_request(profile_config, user_input, debug_mode, proxy="", histor
                 print(rendered_text.strip())
                 if history is not None:
                     history.append({"role": "model", "parts": [{"text": response_text}]})
+                if output_file and history is None:
+                    save_single_response(response_text, output_file)
             else:
                 print("[No content returned]")
                 if debug_mode: print(data)
@@ -752,7 +796,7 @@ def send_gemini_request(profile_config, user_input, debug_mode, proxy="", histor
         print(f"\n[Connection Error] {e}")
         return 1
 
-def send_openai_request(profile_config, user_input, debug_mode, proxy="", history=None):
+def send_openai_request(profile_config, user_input, debug_mode, proxy="", history=None, output_file=None):
     api_key = profile_config.get("api_key")
     model_name = profile_config.get("model_name", "gpt-4o")
     system_instr = profile_config.get("system_instruction", "")
@@ -810,6 +854,8 @@ def send_openai_request(profile_config, user_input, debug_mode, proxy="", histor
                 print(rendered_text.strip())
                 if history is not None:
                     history.append({"role": "assistant", "content": content})
+                if output_file and history is None:
+                    save_single_response(content, output_file)
             else:
                 print("[No content returned]")
                 if debug_mode: print(data)
@@ -972,7 +1018,16 @@ compdef _ai_completion ai""")
     chat_flags = ["--chat", "-i", "chat"]
     profile_flags = ["--profile", "-p"]
     model_flags = ["--model", "-m"]
+    save_flags = ["--save", "-o"]
     
+    output_file = None
+    for flag in save_flags:
+        if flag in sys.argv:
+            idx = sys.argv.index(flag)
+            if idx + 1 < len(sys.argv) and not sys.argv[idx + 1].startswith("-"):
+                output_file = sys.argv[idx + 1].strip()
+                break
+
     # Check if a custom profile is temporarily chosen
     target_profile = config.get("active_profile", "")
     temp_profile = None
@@ -1016,14 +1071,14 @@ compdef _ai_completion ai""")
             print(f"{RED}[Error] Profile '{temp_profile}' not found in configuration.{RESET}")
             return 1
 
-    # Filter out configuration, help, reinstall, chat, model, and profile flags/arguments from prompt text
+    # Filter out configuration, help, reinstall, chat, model, profile, and save flags/arguments from prompt text
     filtered_args = []
     skip = False
     for idx, arg in enumerate(sys.argv[1:]):
         if skip:
             skip = False
             continue
-        if arg in model_flags + profile_flags:
+        if arg in model_flags + profile_flags + save_flags:
             if idx + 2 < len(sys.argv) and not sys.argv[idx + 2].startswith("-"):
                 skip = True
             continue
@@ -1109,6 +1164,15 @@ compdef _ai_completion ai""")
                     print(f"\n{YELLOW}Goodbye!{RESET}")
                     break
                 
+                if user_input.lower().startswith("save ") or user_input.lower().startswith("/save "):
+                    parts = user_input.split(None, 1)
+                    if len(parts) > 1:
+                        filename = parts[1].strip()
+                        save_chat_history(history, filename, provider, target_profile, model_name)
+                    else:
+                        print(f"{RED}[Error] Please provide a filename: save <filename>{RESET}")
+                    continue
+                
                 if provider == "gemini":
                     history.append({"role": "user", "parts": [{"text": user_input}]})
                     status = send_gemini_request(active_config, "", debug_mode, proxy=proxy, history=history)
@@ -1121,6 +1185,10 @@ compdef _ai_completion ai""")
             except (KeyboardInterrupt, EOFError):
                 print(f"\n{YELLOW}Goodbye!{RESET}")
                 break
+
+        # Auto-save history on exit if output_file is set
+        if output_file and history:
+            save_chat_history(history, output_file, provider, target_profile, model_name)
         return 0
 
     user_input = ""
@@ -1137,9 +1205,9 @@ compdef _ai_completion ai""")
     proxy = config.get("proxy", "")
     
     if provider == "gemini":
-        return send_gemini_request(active_config, user_input, debug_mode, proxy=proxy)
+        return send_gemini_request(active_config, user_input, debug_mode, proxy=proxy, output_file=output_file)
     elif provider == "openai":
-        return send_openai_request(active_config, user_input, debug_mode, proxy=proxy)
+        return send_openai_request(active_config, user_input, debug_mode, proxy=proxy, output_file=output_file)
     else:
         print(f"[Error] Invalid provider '{provider}' in profile '{target_profile}'. Use 'gemini' or 'openai'.")
         return 1
